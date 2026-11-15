@@ -58,7 +58,10 @@ export function Player({
     playerVars: {
       // https://developers.google.com/youtube/player_parameters
       start: 0,
-      autoplay: 0,
+      // Start each song as soon as it loads, so the queue plays on after a
+      // song ends or is skipped. Browsers may still block this until someone
+      // has clicked on the page.
+      autoplay: 1,
       rel: 0,
       controls: 1,
       // Hide YouTube's fullscreen button: it fullscreens only the video and
@@ -72,11 +75,7 @@ export function Player({
     // access to player in all event handlers via event.target
     playerRef.current = event.target;
 
-    const playerState = event.target.getPlayerState();
-
-    if (playerState !== -1) {
-      setIsReady(true);
-    }
+    setIsReady(true);
   };
 
   const onPlayerPlay: YouTubeProps["onPlay"] = (_event) => {

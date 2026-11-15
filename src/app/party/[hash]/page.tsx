@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { type KaraokeParty } from "party/types";
-import { env } from "~/env";
+import { fetchPartyServer } from "~/server/party-server";
 import { api } from "~/trpc/server";
 import { PartyScene } from "./party-scene";
 
@@ -31,15 +31,12 @@ export default async function PartyHashPage({ params }: Props) {
     return <div>Party not found</div>;
   }
 
-  const req = await fetch(
-    `${env.NEXT_PUBLIC_PARTYKIT_URL}/parties/main/${partyHash}`,
-    {
-      method: "GET",
-      next: {
-        revalidate: 0,
-      },
+  const req = await fetchPartyServer(partyHash, {
+    method: "GET",
+    next: {
+      revalidate: 0,
     },
-  );
+  });
 
   if (!req.ok) {
     if (req.status === 404) {

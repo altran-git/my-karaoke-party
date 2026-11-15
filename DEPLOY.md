@@ -48,7 +48,21 @@ https://my-karaoke-party.<your-subdomain>.workers.dev
 
 Copy it, including `https://`. This is your `NEXT_PUBLIC_PARTYKIT_URL`. The name is kept from the PartyKit days, so you don't need to rename anything.
 
-Quick check: opening `<that URL>/parties/main/test` in a browser should show **Party not found =(**. That means the server is running.
+Quick check: opening `<that URL>/parties/main/test` in a browser should show **Server misconfigured** until you finish the next step, and **Unauthorized** after it. Either means the server is running.
+
+### Set the shared secret
+
+Only your website may create parties or read their queues on this server. It proves that with a shared secret, a long random string that both sides know.
+
+1. Generate one (works in PowerShell, Command Prompt or any terminal):
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+   Copy the 64-character output. You'll need it again in step 5, so keep it somewhere safe, like a password manager.
+2. Give it to the queue server (it asks you to paste the value):
+   ```bash
+   npx wrangler secret put PARTY_SECRET
+   ```
 
 ### Auto-deploy from GitHub (optional, recommended)
 
@@ -93,6 +107,7 @@ In **Settings → Environment Variables**, add these for all environments:
 | `YOUTUBE_API_KEY` | The key from step 1 |
 | `NEXT_PUBLIC_PARTYKIT_URL` | The URL from step 2, **with** `https://`, e.g. `https://my-karaoke-party.yourname.workers.dev` |
 | `NEXT_PUBLIC_BASE_URL` | Your site's domain **without** `https://`, e.g. `my-karaoke.vercel.app` or `karaoke.example.com` |
+| `PARTY_SECRET` | The same secret you gave the queue server in step 2 (mark it **Sensitive**) |
 
 `NEXT_PUBLIC_BASE_URL` is used for the QR code and join links. If it isn't set, preview deployments fall back to their own unique URLs, which works but changes on every deploy.
 
@@ -121,15 +136,16 @@ In Vercel: **Settings → Domains → Add**, then follow the DNS instructions. A
 - **Change the website:** push to `main`. Vercel deploys it automatically (and the queue server too, if you set up the Cloudflare secrets).
 - **Change the database schema:** create a migration locally with `pnpm prisma migrate dev --name <name>` and commit the `prisma/migrations` folder. Vercel applies it on the next deploy.
 - **Change `party/index.ts`:** push to `main` (with the secrets set up) or run `pnpm deploy:pk`.
-- **Run everything locally:** `pnpm dev:pk` (queue server on http://localhost:8787) and `pnpm dev` (app on http://localhost:3000), with `NEXT_PUBLIC_PARTYKIT_URL=http://localhost:8787` in `.env`.
+- **Run everything locally:** `pnpm dev:pk` (queue server on http://localhost:8787) and `pnpm dev` (app on http://localhost:3000), with `NEXT_PUBLIC_PARTYKIT_URL=http://localhost:8787` in `.env`. Put the same `PARTY_SECRET=<any long random string>` in both `.env` (for the app) and `.dev.vars` (for the queue server). Both files are gitignored.
+- **Change the shared secret:** run `npx wrangler secret put PARTY_SECRET` with the new value, update `PARTY_SECRET` in Vercel, then redeploy on Vercel. Creating parties fails in the minute or two between those steps.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| Build error `Invalid environment variables` | A required variable (`DATABASE_URL`, `YOUTUBE_API_KEY`, `NEXT_PUBLIC_PARTYKIT_URL`) is missing |
+| Build error `Invalid environment variables` | A required variable (`DATABASE_URL`, `YOUTUBE_API_KEY`, `NEXT_PUBLIC_PARTYKIT_URL`, `PARTY_SECRET`) is missing, or `PARTY_SECRET` is shorter than 32 characters |
 | Build error about `DATABASE_URL_NON_POOLING` | Add it with the unpooled Postgres URL (step 4) |
-| Creating a party fails, or the party page shows 404 | `NEXT_PUBLIC_PARTYKIT_URL` is wrong or missing `https://`. Check that `<url>/parties/main/test` shows "Party not found =(" |
+| Creating a party fails, or the party page shows 404 | `NEXT_PUBLIC_PARTYKIT_URL` is wrong or missing `https://`; check that `<url>/parties/main/test` shows "Unauthorized". Or `PARTY_SECRET` differs between Vercel and Cloudflare; Cloudflare logs show `401 Unauthorized` (secrets differ) or `PARTY_SECRET is not set` |
 | `pnpm deploy:pk` says you are not logged in | Run `npx wrangler login` first |
 | Search returns an error | Bad YouTube key, YouTube API not enabled, daily quota used up, or KV variables missing |
 | QR code points to the wrong site | Set `NEXT_PUBLIC_BASE_URL` (no `https://`) and redeploy |

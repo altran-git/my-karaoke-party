@@ -18,7 +18,29 @@ const EXPIRY_PERIOD_MILLISECONDS = 30 * 24 * 60 * 60 * 1000; // 30 days
 type Env = {
 	/** Durable Object binding from wrangler.jsonc. Clients reach it at /parties/main/:room */
 	Main: DurableObjectNamespace<KaraokeServer>;
+	/**
+	 * Shared with the Next.js app (same value as its PARTY_SECRET env var).
+	 * Set with `npx wrangler secret put PARTY_SECRET`, or in .dev.vars locally.
+	 */
+	PARTY_SECRET?: string;
 };
+
+const encoder = new TextEncoder();
+
+/** Constant-time check of the `Authorization: Bearer <secret>` header. */
+function hasValidSecret(request: Request, secret: string): boolean {
+	const header = request.headers.get("Authorization") ?? "";
+	const expected = encoder.encode(`Bearer ${secret}`);
+	const actual = encoder.encode(header);
+
+	// timingSafeEqual needs equal lengths; compare against itself to keep timing flat.
+	if (actual.byteLength !== expected.byteLength) {
+		crypto.subtle.timingSafeEqual(expected, expected);
+		return false;
+	}
+
+	return crypto.subtle.timingSafeEqual(actual, expected);
+}
 
 /**
  * One instance (a Cloudflare Durable Object) per party room. Holds the queue
@@ -30,6 +52,22 @@ export class KaraokeServer extends Server<Env> {
 	static options = { hibernate: true };
 
 	karaokeParty: KaraokeParty | undefined;
+
+	async fetch(request: Request): Promise<Response> {
+		// Only parties created through the app (an authorized POST) can be joined.
+		// Refuse the WebSocket upgrade for made-up room names before it is opened.
+		const isWebSocket =
+			request.headers.get("Upgrade")?.toLowerCase() === "websocket";
+
+		if (
+			isWebSocket &&
+			!(await this.ctx.storage.get<KaraokeParty>("karaokeParty"))
+		) {
+			return new Response("Party not found =(", { status: 404 });
+		}
+
+		return super.fetch(request);
+	}
 
 	async onStart() {
 		this.karaokeParty =
@@ -304,8 +342,23 @@ export class KaraokeServer extends Server<Env> {
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		return (
-			(await routePartykitRequest(request, env)) ??
-			new Response("Not Found", { status: 404 })
+			(await routePartykitRequest(request, env, {
+				// Browsers only use WebSockets (onBeforeConnect, left open so guests
+				// can join). Plain HTTP requests (create a party, read its queue) only
+				// come from the Next.js server, so they must carry the shared secret.
+				onBeforeRequest(req) {
+					const secret = env.PARTY_SECRET;
+
+					if (!secret) {
+						console.error("PARTY_SECRET is not set; rejecting HTTP request.");
+						return new Response("Server misconfigured", { status: 500 });
+					}
+
+					if (!hasValidSecret(req, secret)) {
+						return new Response("Unauthorized", { status: 401 });
+					}
+				},
+			})) ?? new Response("Not Found", { status: 404 })
 		);
 	},
 } satisfies ExportedHandler<Env>;

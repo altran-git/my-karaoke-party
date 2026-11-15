@@ -1,5 +1,5 @@
 import { api } from "~/trpc/server";
-import { env } from "~/env";
+import { fetchPartyServer } from "~/server/party-server";
 import { notFound } from "next/navigation";
 import { type KaraokeParty } from "party/types";
 import PlayerScene from "./player-scene";
@@ -27,7 +27,7 @@ export default async function PartyPage({ params }: Props) {
 
   const partyPromise = api.party.getByHash({ hash: partyHash });
 
-  const req = fetch(`${env.NEXT_PUBLIC_PARTYKIT_URL}/parties/main/${partyHash}`, {
+  const req = fetchPartyServer(partyHash, {
     method: "GET",
     next: {
       revalidate: 0,

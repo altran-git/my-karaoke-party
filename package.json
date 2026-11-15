@@ -8,7 +8,8 @@
     "build": "next build",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "dev:pk": "npx partykit dev",
+    "dev:pk": "wrangler dev",
+    "deploy:pk": "wrangler deploy",
     "dev": "next dev",
     "postinstall": "prisma generate",
     "lint": "next lint",
@@ -67,6 +68,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261115.1",
     "@tailwindcss/typography": "^0.5.13",
     "@types/eslint": "^8.56.2",
     "@types/node": "^20.11.20",
@@ -76,7 +78,7 @@
     "@typescript-eslint/parser": "^7.1.1",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.1.3",
-    "partykit": "0.0.115",
+    "partyserver": "0.5.10",
     "postcss": "^8.4.34",
     "prettier": "^3.2.5",
     "prettier-plugin-tailwindcss": "^0.5.11",
@@ -84,7 +86,8 @@
     "serwist": "^9.0.2",
     "tailwindcss": "^3.4.3",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.4.2"
+    "typescript": "^5.4.2",
+    "wrangler": "4.162.0"
   },
   "ct3aMetadata": {
     "initVersion": "7.33.1"

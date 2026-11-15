@@ -12,7 +12,7 @@ export const partyRouter = createTRPCRouter({
       const party = await ctx.db.party.createWithHash(input);
 
       const res = await fetch(
-        `${env.NEXT_PUBLIC_PARTYKIT_URL}/party/${party.hash}`,
+        `${env.NEXT_PUBLIC_PARTYKIT_URL}/parties/main/${party.hash}`,
         {
           method: "POST",
           headers: {

@@ -1,15 +1,17 @@
-# Deploying your own copy (Vercel + PartyKit)
+# Deploying your own copy (Vercel + Cloudflare)
 
 This guide deploys the app on free tiers:
 
 | Part | Where it runs | How it updates |
 |---|---|---|
 | Website and API (`src/`) | Vercel | Automatically on every push to `main` |
-| Live queue server (`party/index.ts`) | PartyKit (Cloudflare) | GitHub Action on push to `main` (`.github/workflows/deploy.yml`), or `npx partykit deploy` by hand |
+| Live queue server (`party/index.ts`) | Cloudflare Workers + Durable Objects (your own account) | GitHub Action on push to `main` (`.github/workflows/deploy.yml`), or `pnpm deploy:pk` by hand |
 | Database | Postgres (Neon via Vercel, or any provider) | Migrations run during the Vercel build |
 | Search cache | Redis (Upstash via Vercel) | n/a |
 
-Allow about 30 minutes. You need a GitHub account (with this fork), a Google account, and Node.js 20+ with `pnpm` on your computer for the PartyKit step.
+Allow about 30 minutes. You need a GitHub account (with this fork), a Google account, a free Cloudflare account, and Node.js 20+ with `pnpm` 10+ on your computer for the Cloudflare step.
+
+> The hosted PartyKit platform (partykit.io) shut down on 23 Oct 2026. The live queue server now runs on [PartyServer](https://github.com/threepointone/partyserver) in your own Cloudflare account instead.
 
 > Provider dashboards change often. If a button or menu has moved, look for the closest match.
 
@@ -25,38 +27,38 @@ Allow about 30 minutes. You need a GitHub account (with this fork), a Google acc
 
 Free quota: 10,000 units/day. Each search costs 100 units, so you get about 100 searches a day. Results are cached for 24 hours, so repeated searches are free.
 
-## 2. Deploy the PartyKit server
+## 2. Deploy the live queue server to Cloudflare
 
-PartyKit handles the real-time queue shared between the TV screen and phones.
+The live queue server (`party/index.ts`) keeps the queue in sync between the TV screen and phones. It runs as a Cloudflare Worker with Durable Objects, which are included in the Workers **Free** plan.
 
-```bash
-pnpm install
-npx partykit login        # opens the browser and signs in with GitHub
-npx partykit deploy
-```
+1. Create a free account at <https://dash.cloudflare.com/sign-up> and verify your email.
+2. On your computer, in the project folder:
+   ```bash
+   pnpm install
+   npx wrangler login        # opens the browser; click "Allow"
+   pnpm deploy:pk
+   ```
+   If Cloudflare asks you to register a `workers.dev` subdomain, pick any name (e.g. your username) and accept.
 
 When it finishes, it prints a URL like:
 
 ```
-https://karaokeparty.<your-github-username>.partykit.dev
+https://my-karaoke-party.<your-subdomain>.workers.dev
 ```
 
-Copy it, including `https://`. This is your `NEXT_PUBLIC_PARTYKIT_URL`.
+Copy it, including `https://`. This is your `NEXT_PUBLIC_PARTYKIT_URL`. The name is kept from the PartyKit days, so you don't need to rename anything.
 
-### Auto-deploy PartyKit from GitHub (optional, recommended)
+Quick check: opening `<that URL>/parties/main/test` in a browser should show **Party not found =(**. That means the server is running.
 
-The repo already has `.github/workflows/deploy.yml`, which redeploys PartyKit on every push to `main`. For it to work in your fork:
+### Auto-deploy from GitHub (optional, recommended)
 
-1. Generate a token on your computer:
-   ```bash
-   npx partykit token generate
-   ```
-2. In your fork on GitHub: **Settings → Secrets and variables → Actions → New repository secret**, add:
-   - `PARTYKIT_LOGIN`: your PartyKit username (your GitHub username)
-   - `PARTYKIT_TOKEN`: the token from step 1
-3. Make sure Actions are enabled for the fork (**Actions** tab → enable workflows).
+`.github/workflows/deploy.yml` redeploys the queue server on every push to `main`. It's skipped (not failed) until you add these secrets:
 
-Without these secrets the workflow fails on every push. That's harmless, but you'd have to run `npx partykit deploy` by hand after changing `party/index.ts`.
+1. **API token:** Cloudflare dashboard → **My Profile → API Tokens → Create Token**. Use the **Edit Cloudflare Workers** template, select your account, then **Continue → Create Token**. Copy the token.
+2. **Account ID:** Cloudflare dashboard → **Workers & Pages**. The Account ID is shown in the right-hand column (or run `npx wrangler whoami`).
+3. In your fork on GitHub: **Settings → Secrets and variables → Actions → New repository secret**, add:
+   - `CLOUDFLARE_API_TOKEN`: the token from step 1
+   - `CLOUDFLARE_ACCOUNT_ID`: the ID from step 2
 
 ## 3. Create the Vercel project
 
@@ -89,7 +91,7 @@ In **Settings → Environment Variables**, add these for all environments:
 | Name | Value |
 |---|---|
 | `YOUTUBE_API_KEY` | The key from step 1 |
-| `NEXT_PUBLIC_PARTYKIT_URL` | The URL from step 2, **with** `https://`, e.g. `https://karaokeparty.yourname.partykit.dev` |
+| `NEXT_PUBLIC_PARTYKIT_URL` | The URL from step 2, **with** `https://`, e.g. `https://my-karaoke-party.yourname.workers.dev` |
 | `NEXT_PUBLIC_BASE_URL` | Your site's domain **without** `https://`, e.g. `my-karaoke.vercel.app` or `karaoke.example.com` |
 
 `NEXT_PUBLIC_BASE_URL` is used for the QR code and join links. If it isn't set, preview deployments fall back to their own unique URLs, which works but changes on every deploy.
@@ -106,7 +108,7 @@ The build creates the database tables (`prisma migrate deploy`) and then builds 
 2. Scan the QR code with your phone and join.
 3. Search for a song and add it. It should appear on the TV screen right away.
 
-If search fails, check `YOUTUBE_API_KEY` and the KV variables. If the queue doesn't update live, check `NEXT_PUBLIC_PARTYKIT_URL`.
+If search fails, check `YOUTUBE_API_KEY` and the KV variables. If the queue doesn't update live, check `NEXT_PUBLIC_PARTYKIT_URL`. Live logs from the queue server are in the Cloudflare dashboard under **Workers & Pages → my-karaoke-party → Logs**.
 
 ## Custom domain (optional)
 
@@ -116,9 +118,10 @@ In Vercel: **Settings → Domains → Add**, then follow the DNS instructions. A
 
 ## Day-to-day workflow
 
-- **Change the website:** push to `main`. Vercel deploys it automatically (and PartyKit too, if you set up the GitHub secrets).
+- **Change the website:** push to `main`. Vercel deploys it automatically (and the queue server too, if you set up the Cloudflare secrets).
 - **Change the database schema:** create a migration locally with `pnpm prisma migrate dev --name <name>` and commit the `prisma/migrations` folder. Vercel applies it on the next deploy.
-- **Change `party/index.ts`:** push to `main` (with the secrets set up) or run `npx partykit deploy`.
+- **Change `party/index.ts`:** push to `main` (with the secrets set up) or run `pnpm deploy:pk`.
+- **Run everything locally:** `pnpm dev:pk` (queue server on http://localhost:8787) and `pnpm dev` (app on http://localhost:3000), with `NEXT_PUBLIC_PARTYKIT_URL=http://localhost:8787` in `.env`.
 
 ## Troubleshooting
 
@@ -126,7 +129,8 @@ In Vercel: **Settings → Domains → Add**, then follow the DNS instructions. A
 |---|---|
 | Build error `Invalid environment variables` | A required variable (`DATABASE_URL`, `YOUTUBE_API_KEY`, `NEXT_PUBLIC_PARTYKIT_URL`) is missing |
 | Build error about `DATABASE_URL_NON_POOLING` | Add it with the unpooled Postgres URL (step 4) |
-| Party page shows 404 right after creating a party | `NEXT_PUBLIC_PARTYKIT_URL` is wrong or missing `https://` |
+| Creating a party fails, or the party page shows 404 | `NEXT_PUBLIC_PARTYKIT_URL` is wrong or missing `https://`. Check that `<url>/parties/main/test` shows "Party not found =(" |
+| `pnpm deploy:pk` says you are not logged in | Run `npx wrangler login` first |
 | Search returns an error | Bad YouTube key, YouTube API not enabled, daily quota used up, or KV variables missing |
 | QR code points to the wrong site | Set `NEXT_PUBLIC_BASE_URL` (no `https://`) and redeploy |
 | Changing a `NEXT_PUBLIC_*` variable has no effect | These are baked in at build time, so redeploy after changing them |

@@ -18,19 +18,19 @@ Based on T3 App (https://create.t3.gg/)
 - Postgres
 - Prisma
 - Tailwind
-- PartyKit
+- PartyServer (realtime queue on Cloudflare Durable Objects)
 
 ## Development
 
 1. Run `pnpm install` to install dependencies.
 1. Copy .env.example to .env and fill in the values.
 1. Run `pnpm db:push` to create the database.
-1. Run `pnpm dev:pk` to start the PartyKit development server.
+1. Run `pnpm dev:pk` to start the realtime server locally (http://localhost:8787).
 1. Run `pnpm dev` to start the development server.
 
 ## Deployment
 
-See [DEPLOY.md](./DEPLOY.md) for a step-by-step guide to self-hosting on Vercel + PartyKit (free tiers).
+See [DEPLOY.md](./DEPLOY.md) for a step-by-step guide to self-hosting on Vercel + Cloudflare (free tiers).
 
 ## Contribution
 

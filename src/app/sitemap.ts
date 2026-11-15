@@ -1,18 +1,11 @@
 import type { MetadataRoute } from "next";
+import { getUrl } from "~/utils/url";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    {
-      url: "https://www.mykaraoke.party/",
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 1,
-    },
-    {
-      url: "https://www.mykaraoke.party/terms-of-service",
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 1,
-    },
-  ];
+  return ["/", "/terms-of-service", "/privacy-policy"].map((path) => ({
+    url: getUrl(path),
+    lastModified: new Date(),
+    changeFrequency: "monthly",
+    priority: path === "/" ? 1 : 0.5,
+  }));
 }

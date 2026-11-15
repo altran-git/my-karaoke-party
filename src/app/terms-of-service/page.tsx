@@ -8,14 +8,35 @@ export default function TermsOfServicePage() {
   return (
     <article className="container prose mx-auto p-6 lg:prose-xl bg-slate-100 sm:my-8 rounded-lg shadow-lg">
       <h1>Terms of Service</h1>
+      <p>
+        <em>Last updated: November 15, 2026</em>
+      </p>
 
       <h2>Introduction</h2>
       <p>
         Welcome to &quot;My Karaoke Party&quot;! These Terms of Service
         (&quot;Terms&quot;) govern your use of our web application
         (&quot;App&quot;) that allows users to search and play karaoke videos
-        from YouTube. By using our App, you agree to these Terms. If you do not
-        agree with these Terms, you may not use the App.
+        from YouTube. The App is run by the operator of My Karaoke Party
+        (&quot;we&quot;, &quot;us&quot;). By using our App, you agree to these
+        Terms. If you do not agree with these Terms, you may not use the App.
+      </p>
+
+      <h2>YouTube</h2>
+      <p>
+        The App uses YouTube API Services to search for videos and plays them
+        with YouTube&apos;s embedded player. Videos are provided by YouTube,
+        not by us, and we do not host, own or control them. By using the App,
+        you agree to be bound by the{" "}
+        <a
+          href="https://www.youtube.com/t/terms"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          YouTube Terms of Service
+        </a>
+        . See our <Link href="/privacy-policy">Privacy Policy</Link> for how
+        information is handled, including by Google.
       </p>
 
       <h2>Personal Use Only</h2>
@@ -115,6 +136,13 @@ export default function TermsOfServicePage() {
         harmful components.
       </p>
 
+      <h2>Privacy</h2>
+      <p>
+        Our <Link href="/privacy-policy">Privacy Policy</Link> explains what
+        information the App collects and how it is used. It forms part of
+        these Terms.
+      </p>
+
       <h2>Changes to Terms</h2>
       <h3>Modifications</h3>
       <p>
@@ -128,7 +156,7 @@ export default function TermsOfServicePage() {
       <p>
         If you have any questions or concerns about these Terms or the App,
         please contact us at{" "}
-        <a href="mailto:hello@mykaraoke.party">hello@mykaraoke.party</a>.
+        <a href="mailto:tranmykaraoke@gmail.com">tranmykaraoke@gmail.com</a>.
       </p>
 
       <p>
@@ -137,6 +165,8 @@ export default function TermsOfServicePage() {
       </p>
 
       <p>
+        <Link href="/privacy-policy">Privacy Policy</Link>
+        {" · "}
         <Link className="link link-secondary" href="/">
           Back to Home
         </Link>

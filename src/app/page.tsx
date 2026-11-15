@@ -47,9 +47,12 @@ export default async function Home() {
 
         <CreateParty />
 
-        <div className="shrink-0">
+        <div className="shrink-0 space-x-4">
           <Link href="/terms-of-service" className="hover:underline">
             Terms of Service
+          </Link>
+          <Link href="/privacy-policy" className="hover:underline">
+            Privacy Policy
           </Link>
         </div>
       </div>

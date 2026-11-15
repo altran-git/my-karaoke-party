@@ -218,7 +218,7 @@ export function Player({
         )}
       </div>
 
-      <div className="pointer-events-none absolute bottom-16 left-0 z-10 flex w-full flex-row justify-between px-4">
+      <div className="pointer-events-none absolute bottom-24 left-0 z-10 flex w-full flex-row justify-between px-4">
         <QrCode url={joinPartyUrl} className="pointer-events-auto" />
 
         <div

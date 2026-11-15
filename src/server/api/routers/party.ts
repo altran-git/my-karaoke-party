@@ -1,6 +1,6 @@
 import { log } from "next-axiom";
 import { z } from "zod";
-import { env } from "~/env";
+import { fetchPartyServer } from "~/server/party-server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 export const partyRouter = createTRPCRouter({
@@ -11,15 +11,11 @@ export const partyRouter = createTRPCRouter({
 
       const party = await ctx.db.party.createWithHash(input);
 
-      const res = await fetch(
-        `${env.NEXT_PUBLIC_PARTYKIT_URL}/parties/main/${party.hash}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
+      if (!party.hash) {
+        throw new Error("Party was created without a hash");
+      }
+
+      const res = await fetchPartyServer(party.hash, { method: "POST" });
 
       if (!res.ok) {
         await ctx.db.party.delete({ where: { id: party.id } });

@@ -218,11 +218,11 @@ export function Player({
         )}
       </div>
 
-      <div className="absolute bottom-12 left-0 z-10 flex w-full flex-row justify-between px-4">
-        <QrCode url={joinPartyUrl} />
+      <div className="pointer-events-none absolute bottom-16 left-0 z-10 flex w-full flex-row justify-between px-4">
+        <QrCode url={joinPartyUrl} className="pointer-events-auto" />
 
         <div
-          className={`self-end p-2 ${
+          className={`pointer-events-auto self-end p-2 ${
             isPlaying && isFullscreen ? "hidden" : "block"
           }`}
         >

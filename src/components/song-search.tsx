@@ -9,6 +9,7 @@ import { Input } from "./ui/ui/input";
 import { Button } from "./ui/ui/button";
 import { Skeleton } from "./ui/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "./ui/ui/alert";
+import { PoweredByYouTube } from "./powered-by-youtube";
 
 type Props = {
   onVideoAdded: (videoId: string, title: string, coverUrl: string) => void;
@@ -150,6 +151,8 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
               </div>
             );
           })}
+
+          <PoweredByYouTube className="text-center opacity-80" />
         </div>
       )}
     </form>

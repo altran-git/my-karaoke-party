@@ -2,6 +2,7 @@ import Image from "next/image";
 import { CreateParty } from "../components/create-party";
 import logo from "~/assets/my-karaoke-party-logo.png";
 import Link from "next/link";
+import { PoweredByYouTube } from "~/components/powered-by-youtube";
 
 export default async function Home() {
   return (
@@ -21,13 +22,16 @@ export default async function Home() {
 
         <CreateParty />
 
-        <div className="shrink-0 space-x-4">
-          <Link href="/terms-of-service" className="hover:underline">
-            Terms of Service
-          </Link>
-          <Link href="/privacy-policy" className="hover:underline">
-            Privacy Policy
-          </Link>
+        <div className="flex shrink-0 flex-col items-center gap-1 text-center">
+          <PoweredByYouTube />
+          <div className="space-x-4">
+            <Link href="/terms-of-service" className="hover:underline">
+              Terms of Service
+            </Link>
+            <Link href="/privacy-policy" className="hover:underline">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </main>

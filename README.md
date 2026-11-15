@@ -28,6 +28,10 @@ Based on T3 App (https://create.t3.gg/)
 1. Run `pnpm dev:pk` to start the PartyKit development server.
 1. Run `pnpm dev` to start the development server.
 
+## Deployment
+
+See [DEPLOY.md](./DEPLOY.md) for a step-by-step guide to self-hosting on Vercel + PartyKit (free tiers).
+
 ## Contribution
 
 I don't have time to work on this at the moment but I'll happy take in PRs and deploy changes to the live site at https://www.mykaraoke.party.

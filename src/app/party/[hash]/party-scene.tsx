@@ -2,7 +2,7 @@
 "use client";
 
 import type { Party } from "@prisma/client";
-import type { Message, KaraokeParty } from "party";
+import type { Message, KaraokeParty } from "party/types";
 import usePartySocket from "partysocket/react";
 import { useEffect, useState } from "react";
 import { env } from "~/env";
@@ -43,6 +43,7 @@ export function PartyScene({
 
   const socket = usePartySocket({
     host: env.NEXT_PUBLIC_PARTYKIT_URL,
+    party: "main",
     room: party.hash ?? "",
     // onOpen(_event) {
     //   if (name) {

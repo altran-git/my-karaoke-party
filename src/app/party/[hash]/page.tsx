@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { type KaraokeParty } from "party";
+import { type KaraokeParty } from "party/types";
 import { env } from "~/env";
 import { api } from "~/trpc/server";
 import { PartyScene } from "./party-scene";
@@ -32,7 +32,7 @@ export default async function PartyHashPage({ params }: Props) {
   }
 
   const req = await fetch(
-    `${env.NEXT_PUBLIC_PARTYKIT_URL}/party/${partyHash}`,
+    `${env.NEXT_PUBLIC_PARTYKIT_URL}/parties/main/${partyHash}`,
     {
       method: "GET",
       next: {

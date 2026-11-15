@@ -1,28 +1,47 @@
-name: Deploy
+name: Deploy realtime server
+
+# Deploys party/index.ts to Cloudflare Workers on every push to main.
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+# (see DEPLOY.md). Without them the job is skipped instead of failing.
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Check Cloudflare secrets
+        id: secrets
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Cloudflare secrets not set; skipping deploy. See DEPLOY.md."
+          fi
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
 
       - uses: pnpm/action-setup@v4
+        if: steps.secrets.outputs.ok == 'true'
         with:
-          version: 8
-          run_install: true
+          version: 10
 
-      - run: pnpm dlx partykit deploy
-        env:
-          PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_TOKEN }}
-          PARTYKIT_LOGIN: ${{ secrets.PARTYKIT_LOGIN  }}
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.secrets.outputs.ok == 'true'
+
+      - run: pnpm deploy:pk
+        if: steps.secrets.outputs.ok == 'true'

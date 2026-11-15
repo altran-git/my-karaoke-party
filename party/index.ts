@@ -1,115 +1,60 @@
-import type { Video } from "@prisma/client";
-import type * as Party from "partykit/server";
-import { z } from "zod";
+import {
+	type Connection,
+	type ConnectionContext,
+	routePartykitRequest,
+	Server,
+	type WSMessage,
+} from "partyserver";
 import { orderByFairness } from "~/utils/array";
 import { moveInQueue } from "~/utils/playlist";
+import {
+	type KaraokeParty,
+	Message,
+	type SettingsUpdate,
+} from "./types";
 
 const EXPIRY_PERIOD_MILLISECONDS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-const AddVideo = z.object({
-	type: z.literal("add-video"),
-	id: z.string(),
-	title: z.string(),
-	artist: z.string().optional(),
-	song: z.string().optional(),
-	coverUrl: z.string(),
-	duration: z.string().optional(),
-	singerName: z.string(),
-});
-
-const MarkAsPlayed = z.object({
-	type: z.literal("mark-as-played"),
-	id: z.string(),
-});
-
-const RemoveVideo = z.object({
-	type: z.literal("remove-video"),
-	id: z.string(),
-});
-
-const PostponeVideo = z.object({
-	type: z.literal("postpone-video"),
-	id: z.string(),
-});
-
-const MoveVideo = z.object({
-	type: z.literal("move-video"),
-	id: z.string(),
-	/** Target position in the queue of unplayed videos. 0 is the song playing right now. */
-	toIndex: z.number().int().nonnegative(),
-});
-
-const SetFairQueue = z.object({
-	type: z.literal("set-fair-queue"),
-	enabled: z.boolean(),
-});
-
-const Horn = z.object({
-	type: z.literal("horn"),
-});
-
-const Message = z.union([
-	AddVideo,
-	RemoveVideo,
-	MarkAsPlayed,
-	PostponeVideo,
-	MoveVideo,
-	SetFairQueue,
-	Horn,
-]);
-
-type KaraokePartySettings = {
-	orderByFairness: boolean;
+type Env = {
+	/** Durable Object binding from wrangler.jsonc. Clients reach it at /parties/main/:room */
+	Main: DurableObjectNamespace<KaraokeServer>;
 };
 
-export type Message = z.infer<typeof Message>;
+/**
+ * One instance (a Cloudflare Durable Object) per party room. Holds the queue
+ * in memory, persists it to Durable Object storage and broadcasts changes.
+ */
+export class KaraokeServer extends Server<Env> {
+	// Let Cloudflare evict the object between messages while sockets stay open;
+	// onStart reloads the party from storage when it wakes up.
+	static options = { hibernate: true };
 
-export type VideoInPlaylist = Omit<Video, "duration"> & {
-	singerName: string;
-	playedAt: Date | null;
-	postponedAt?: Date | null;
-	duration: string | undefined;
-};
-
-export type KaraokeParty = {
-	playlist: VideoInPlaylist[];
-	settings: KaraokePartySettings;
-};
-
-export type SettingsUpdate = {
-	type: "settings";
-	settings: KaraokePartySettings;
-};
-
-export default class Server implements Party.Server {
 	karaokeParty: KaraokeParty | undefined;
-
-	constructor(readonly room: Party.Room) {}
 
 	async onStart() {
 		this.karaokeParty =
-			await this.room.storage.get<KaraokeParty>("karaokeParty");
+			await this.ctx.storage.get<KaraokeParty>("karaokeParty");
 	}
 
-	async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+	async onConnect(conn: Connection, ctx: ConnectionContext) {
 		// A websocket just connected!
 		console.log(
 			`Connected:
       id: ${conn.id}
-      room: ${this.room.id}
+      room: ${this.name}
       url: ${new URL(ctx.request.url).pathname}`,
 		);
 
-		await this.room.storage.setAlarm(Date.now() + EXPIRY_PERIOD_MILLISECONDS);
+		await this.ctx.storage.setAlarm(Date.now() + EXPIRY_PERIOD_MILLISECONDS);
 	}
 
-	async onClose(connection: Party.Connection) {
+	async onClose(connection: Connection) {
 		// A websocket just disconnected!
 		console.log(`Disconnected: ${connection.id}`);
 	}
 
-	async onMessage(message: string, _sender: Party.Connection) {
-		if (!this.karaokeParty) return;
+	async onMessage(_sender: Connection, message: WSMessage) {
+		if (!this.karaokeParty || typeof message !== "string") return;
 
 		console.log("Received message:", message);
 
@@ -122,7 +67,7 @@ export default class Server implements Party.Server {
 
 		const data = result.data;
 
-		await this.room.storage.setAlarm(Date.now() + EXPIRY_PERIOD_MILLISECONDS);
+		await this.ctx.storage.setAlarm(Date.now() + EXPIRY_PERIOD_MILLISECONDS);
 
 		switch (data.type) {
 			case "add-video": {
@@ -149,7 +94,7 @@ export default class Server implements Party.Server {
 					}
 
 					await this.savekaraokeParty();
-					this.room.broadcast(JSON.stringify(this.karaokeParty.playlist));
+					this.broadcast(JSON.stringify(this.karaokeParty.playlist));
 				}
 
 				break;
@@ -163,7 +108,7 @@ export default class Server implements Party.Server {
 				if (index !== -1) {
 					this.karaokeParty.playlist.splice(index, 1);
 					await this.savekaraokeParty();
-					this.room.broadcast(JSON.stringify(this.karaokeParty.playlist));
+					this.broadcast(JSON.stringify(this.karaokeParty.playlist));
 				}
 
 				break;
@@ -197,7 +142,7 @@ export default class Server implements Party.Server {
 						];
 
 						await this.savekaraokeParty();
-						this.room.broadcast(JSON.stringify(playlist));
+						this.broadcast(JSON.stringify(playlist));
 					}
 				}
 
@@ -258,7 +203,7 @@ export default class Server implements Party.Server {
 					}
 
 					await this.savekaraokeParty();
-					this.room.broadcast(JSON.stringify(this.karaokeParty.playlist));
+					this.broadcast(JSON.stringify(this.karaokeParty.playlist));
 				}
 
 				break;
@@ -266,7 +211,7 @@ export default class Server implements Party.Server {
 
 			case "horn": {
 				// Just broadcast the horn event to all clients
-				this.room.broadcast(JSON.stringify({ type: "horn" }));
+				this.broadcast(JSON.stringify({ type: "horn" }));
 				break;
 			}
 
@@ -276,7 +221,7 @@ export default class Server implements Party.Server {
 		}
 	}
 
-	async onRequest(req: Party.Request) {
+	async onRequest(req: Request) {
 		if (req.method === "POST" && !this.karaokeParty) {
 			console.log("Creating new karaoke party");
 
@@ -303,8 +248,8 @@ export default class Server implements Party.Server {
 	broadcastParty() {
 		if (!this.karaokeParty) return;
 
-		this.room.broadcast(JSON.stringify(this.karaokeParty.playlist));
-		this.room.broadcast(
+		this.broadcast(JSON.stringify(this.karaokeParty.playlist));
+		this.broadcast(
 			JSON.stringify({
 				type: "settings",
 				settings: this.karaokeParty.settings,
@@ -314,7 +259,7 @@ export default class Server implements Party.Server {
 
 	async savekaraokeParty() {
 		if (this.karaokeParty) {
-			await this.room.storage.put<KaraokeParty>(
+			await this.ctx.storage.put<KaraokeParty>(
 				"karaokeParty",
 				this.karaokeParty,
 			);
@@ -322,7 +267,9 @@ export default class Server implements Party.Server {
 	}
 
 	async onAlarm() {
-		await this.room.storage.deleteAll();
+		// The party has been idle for EXPIRY_PERIOD_MILLISECONDS: forget it.
+		this.karaokeParty = undefined;
+		await this.ctx.storage.deleteAll();
 	}
 
 	reorderPlaylistByFairness() {
@@ -354,4 +301,11 @@ export default class Server implements Party.Server {
 	}
 }
 
-Server satisfies Party.Worker;
+export default {
+	async fetch(request: Request, env: Env): Promise<Response> {
+		return (
+			(await routePartykitRequest(request, env)) ??
+			new Response("Not Found", { status: 404 })
+		);
+	},
+} satisfies ExportedHandler<Env>;

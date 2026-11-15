@@ -1,0 +1,19 @@
+// Cloudflare Worker that runs the realtime queue server (party/index.ts).
+// Deploy with `pnpm deploy:pk`; run locally with `pnpm dev:pk`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-karaoke-party",
+  "main": "party/index.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [
+      // The binding name "Main" makes clients connect to /parties/main/:room
+      { "name": "Main", "class_name": "KaraokeServer" }
+    ]
+  },
+  "migrations": [
+    // SQLite-backed Durable Objects are available on the Workers Free plan.
+    { "tag": "v1", "new_sqlite_classes": ["KaraokeServer"] }
+  ],
+  "observability": { "enabled": true }
+}

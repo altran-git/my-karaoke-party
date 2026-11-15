@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import type { Message, KaraokeParty } from "party";
+import type { Message, KaraokeParty } from "party/types";
 import usePartySocket from "partysocket/react";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
@@ -76,6 +76,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
 
   const socket = usePartySocket({
     host: env.NEXT_PUBLIC_PARTYKIT_URL,
+    party: "main",
     room: party.hash ?? "",
     onMessage(event) {
       // TODO: Improve type safety

@@ -61,6 +61,9 @@ export function Player({
       autoplay: 0,
       rel: 0,
       controls: 1,
+      // Hide YouTube's fullscreen button: it fullscreens only the video and
+      // drops our overlay (QR code, Skip). Use the app's fullscreen instead.
+      fs: 0,
     },
   };
 

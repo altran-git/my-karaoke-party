@@ -41,11 +41,14 @@ const SetFairQueue = z.object({
 	enabled: z.boolean(),
 });
 
-/** A guest asks the player screen to play or pause the song on screen. */
+/**
+ * A guest asks the player screen to play or pause the song on screen.
+ * Without `playing` (the guest doesn't know its state yet) it toggles.
+ */
 const SetPlayback = z.object({
 	type: z.literal("set-playback"),
 	id: z.string(),
-	playing: z.boolean(),
+	playing: z.boolean().optional(),
 });
 
 /** The player screen reports whether the song on screen is playing. */
@@ -72,9 +75,11 @@ export type PlaybackState = {
 	playing: boolean;
 };
 
-/** Relayed to the player screen: play or pause video `id`. */
-export type PlaybackCommand = PlaybackState & {
+/** Relayed to the player screen: play or pause video `id` (toggle without `playing`). */
+export type PlaybackCommand = {
 	type: "playback-command";
+	id: string;
+	playing?: boolean;
 };
 
 /** Relayed to everyone: whether video `id` is playing on the player screen. */

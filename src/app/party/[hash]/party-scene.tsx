@@ -155,10 +155,9 @@ export function PartyScene({
   const nextVideos = playlist.filter((video) => !video.playedAt);
   const nextVideo = nextVideos[0] ?? null;
 
-  // Only trust the reported state if it is about the song on screen now;
-  // a new song that hasn't started yet counts as paused.
-  const isPlaying =
-    !!nextVideo && playback?.id === nextVideo.id && playback.playing;
+  // Only trust the reported state if it is about the song on screen now.
+  const knowsPlayback = !!nextVideo && playback?.id === nextVideo.id;
+  const isPlaying = knowsPlayback && playback.playing;
 
   const togglePlayback = () => {
     if (!nextVideo) return;
@@ -167,7 +166,9 @@ export function PartyScene({
       JSON.stringify({
         type: "set-playback",
         id: nextVideo.id,
-        playing: !isPlaying,
+        // Without a report from the player screen yet, let it toggle
+        // instead of guessing which state the song is in.
+        ...(knowsPlayback ? { playing: !isPlaying } : {}),
       } satisfies Message),
     );
   };

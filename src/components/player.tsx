@@ -19,7 +19,9 @@ type Props = {
   onPlayerEnd: () => void;
   onTogglePlayPauseRef?: React.MutableRefObject<(() => void) | null>;
   /** Filled in with a function that plays (true) or pauses (false) the video. */
-  onSetPlayingRef?: React.MutableRefObject<((playing: boolean) => void) | null>;
+  onSetPlayingRef?: React.MutableRefObject<
+    ((playing?: boolean) => void) | null
+  >;
   /** Called whenever the video starts or stops playing. */
   onPlayingChange?: (playing: boolean) => void;
 };
@@ -71,17 +73,27 @@ export function Player({
     }
   }, [onTogglePlayPauseRef, togglePlayPause, isReady]);
 
+  /** Plays (true) or pauses (false) the video; toggles when `playing` is omitted. */
   const setPlaying = useCallback(
-    (playing: boolean) => {
+    (playing?: boolean) => {
       if (!playerRef.current || !isReady) return;
 
-      if (playing) {
+      // YouTube player states: 1 playing, 3 buffering (about to play)
+      const state = playerRef.current.getPlayerState();
+      const isNowPlaying = state === 1 || state === 3;
+      const target = playing ?? !isNowPlaying;
+
+      if (target === isNowPlaying) {
+        // Nothing to change, so no play/pause event will fire: report the
+        // state anyway so the phone that asked shows the right button.
+        onPlayingChange?.(isNowPlaying);
+      } else if (target) {
         playerRef.current.playVideo();
       } else {
         playerRef.current.pauseVideo();
       }
     },
-    [isReady],
+    [isReady, onPlayingChange],
   );
 
   // Set ref for remote play/pause (from guests' phones)

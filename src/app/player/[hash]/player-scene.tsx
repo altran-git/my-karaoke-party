@@ -62,7 +62,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   }, [party.hash, party.name]);
 
   const togglePlayPauseRef = useRef<(() => void) | null>(null);
-  const setPlayingRef = useRef<((playing: boolean) => void) | null>(null);
+  const setPlayingRef = useRef<((playing?: boolean) => void) | null>(null);
   // Id of the song on screen, read from inside the socket message handler.
   const currentVideoIdRef = useRef<string | null>(null);
 
@@ -87,7 +87,11 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
         // A guest pressed play/pause on their phone. Ignore it if the song
         // they were looking at is no longer the one on screen.
         if (eventData.id === currentVideoIdRef.current) {
-          setPlayingRef.current?.(Boolean(eventData.playing));
+          setPlayingRef.current?.(
+            typeof eventData.playing === "boolean"
+              ? eventData.playing
+              : undefined,
+          );
         }
       }
 

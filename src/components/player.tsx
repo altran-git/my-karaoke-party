@@ -335,18 +335,19 @@ export function Player({
         </span>
       </div>
 
-      <div className="pointer-events-none absolute bottom-32 left-0 z-10 flex w-full flex-row justify-between px-4">
-        {/* ml-12 keeps the QR code clear of the edge on TVs that crop the
-            picture (overscan), so it can still be scanned. size is smaller
-            than the 128px default so it covers less of the lyrics. */}
+      {/* QR code with Skip under it, both right-aligned, just above YouTube's
+          seek bar. right-16 keeps them clear of the edge on TVs that crop the
+          picture (overscan), so the code can still be scanned. size is
+          smaller than the 128px default so it covers less of the lyrics. */}
+      <div className="pointer-events-none absolute bottom-20 right-16 z-10 flex flex-col items-end">
         <QrCode
           url={joinPartyUrl}
           size={100}
-          className="pointer-events-auto ml-12"
+          className="pointer-events-auto"
         />
 
         <div
-          className={`pointer-events-auto self-end p-2 ${
+          className={`pointer-events-auto pt-1 ${
             // Hide Skip while playing fullscreen, and always on the last song
             // in the queue (there's nothing to skip to).
             !nextVideo || (isPlaying && isFullscreen) ? "hidden" : "block"

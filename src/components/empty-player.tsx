@@ -25,8 +25,8 @@ export function EmptyPlayer({ joinPartyUrl, className }: Props) {
           className="mx-auto object-contain duration-1000 animate-in zoom-in-150 spin-in-180 max-h-[40vh]"
         />
       </div>
-      {/* Same spot as the QR code over a playing song (see player.tsx):
-          clear of the edges on TVs that crop the picture (overscan). */}
+      {/* ml-12 keeps the QR code clear of the edge on TVs that crop the
+          picture (overscan). */}
       <div className="absolute bottom-32 left-0 flex w-full items-end px-4 text-center">
         <QrCode url={joinPartyUrl} className="ml-12" />
         <a

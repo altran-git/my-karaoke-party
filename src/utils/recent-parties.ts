@@ -7,10 +7,12 @@ export type RecentParty = {
   hash: string;
   name: string;
   lastOpenedAt: number;
+  /** Secret that lets this browser delete the party. Only the creator has it. */
+  hostKey?: string;
 };
 
 const STORAGE_KEY = "recent-parties";
-const MAX_RECENT_PARTIES = 10;
+const MAX_RECENT_PARTIES = 20;
 
 export function getRecentParties(): RecentParty[] {
   try {
@@ -46,10 +48,22 @@ function saveRecentParties(parties: RecentParty[]) {
   }
 }
 
-export function rememberParty(party: { hash: string; name: string }) {
-  const others = getRecentParties().filter((p) => p.hash !== party.hash);
+export function rememberParty(party: {
+  hash: string;
+  name: string;
+  hostKey?: string;
+}) {
+  const all = getRecentParties();
+  const existing = all.find((p) => p.hash === party.hash);
+  const others = all.filter((p) => p.hash !== party.hash);
   saveRecentParties([
-    { hash: party.hash, name: party.name, lastOpenedAt: Date.now() },
+    {
+      hash: party.hash,
+      name: party.name,
+      lastOpenedAt: Date.now(),
+      // Reopening the player screen must not drop a key saved at creation.
+      hostKey: party.hostKey ?? existing?.hostKey,
+    },
     ...others,
   ]);
 }

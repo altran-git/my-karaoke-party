@@ -33,10 +33,10 @@ import { env } from "~/env";
 import { cn } from "~/lib/utils";
 import { moveInQueue } from "~/utils/playlist";
 import { getUrl } from "~/utils/url";
-import { rememberParty } from "~/utils/recent-parties";
+import { forgetParty, rememberParty } from "~/utils/recent-parties";
 
 type Props = {
-  party: Party;
+  party: Omit<Party, "hostKeyHash">;
   initialPlaylist: KaraokeParty;
 };
 
@@ -91,6 +91,14 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
       // TODO: Improve type safety
       const eventData = JSON.parse(event.data);
       console.log(eventData);
+
+      if (eventData.type === "party-deleted") {
+        // The host deleted this party (maybe from another tab or device).
+        if (party.hash) forgetParty(party.hash);
+        socket.close();
+        window.location.replace("/");
+        return;
+      }
 
       if (eventData.type === "horn") {
         playThrottledHorn();

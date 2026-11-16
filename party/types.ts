@@ -77,3 +77,8 @@ export type SettingsUpdate = {
 	type: "settings";
 	settings: KaraokePartySettings;
 };
+
+/** Sent to everyone in the room right before the party is deleted. */
+export type PartyDeleted = {
+	type: "party-deleted";
+};

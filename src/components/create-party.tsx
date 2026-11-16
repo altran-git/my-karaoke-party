@@ -33,7 +33,11 @@ export function CreateParty() {
   const createParty = api.party.create.useMutation({
     onSuccess: (party) => {
       if (party.hash) {
-        rememberParty({ hash: party.hash, name: party.name });
+        rememberParty({
+          hash: party.hash,
+          name: party.name,
+          hostKey: party.hostKey,
+        });
       }
 
       fire(); // Trigger the confetti animation

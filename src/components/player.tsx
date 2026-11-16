@@ -220,8 +220,10 @@ export function Player({
         )}
       </div>
 
-      <div className="pointer-events-none absolute bottom-24 left-0 z-10 flex w-full flex-row justify-between px-4">
-        <QrCode url={joinPartyUrl} className="pointer-events-auto" />
+      <div className="pointer-events-none absolute bottom-32 left-0 z-10 flex w-full flex-row justify-between px-4">
+        {/* ml-20 keeps the QR code clear of the edge on TVs that crop the
+            picture (overscan), so it can still be scanned. */}
+        <QrCode url={joinPartyUrl} className="pointer-events-auto ml-20" />
 
         <div
           className={`pointer-events-auto self-end p-2 ${

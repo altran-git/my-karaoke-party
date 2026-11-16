@@ -144,9 +144,9 @@ export class KaraokeServer extends Server<Env> {
 						duration: data.duration ?? undefined,
 					});
 
-					if (this.karaokeParty.settings.orderByFairness) {
-						this.reorderPlaylistByFairness();
-					}
+					// New requests always go to the end of the queue, even with the
+					// fair queue on: re-sorting here would let a newcomer's song jump
+					// ahead of songs that were requested earlier.
 
 					await this.savekaraokeParty();
 					this.broadcast(JSON.stringify(this.karaokeParty.playlist));
@@ -214,8 +214,8 @@ export class KaraokeServer extends Server<Env> {
 				if (reordered !== this.karaokeParty.playlist) {
 					this.karaokeParty.playlist = reordered;
 
-					// The host just said where this song goes; re-running the fair
-					// order on the next add would throw that away.
+					// The host just said where this song goes: the queue is no longer
+					// in fair order, so show it as manually sorted.
 					this.karaokeParty.settings.orderByFairness = false;
 
 					await this.savekaraokeParty();

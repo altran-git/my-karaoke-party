@@ -3,6 +3,7 @@ import { CreateParty } from "../components/create-party";
 import logo from "~/assets/my-karaoke-party-logo.png";
 import Link from "next/link";
 import { PoweredByYouTube } from "~/components/powered-by-youtube";
+import { ExistingParties } from "~/components/existing-parties";
 
 export default async function Home() {
   return (
@@ -21,6 +22,8 @@ export default async function Home() {
         </div>
 
         <CreateParty />
+
+        <ExistingParties />
 
         <div className="flex shrink-0 flex-col items-center gap-1 text-center">
           <PoweredByYouTube />

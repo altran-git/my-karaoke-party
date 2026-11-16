@@ -2,30 +2,33 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider  = "postgresql"
-    url       = env("DATABASE_URL")
-    directUrl = env("DATABASE_URL_NON_POOLING")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_NON_POOLING")
 }
 
 model Video {
-    id        String   @id
-    title     String
-    artist    String
-    song      String
-    coverUrl  String
-    createdAt DateTime @default(now())
-    duration  String
+  id        String   @id
+  title     String
+  artist    String
+  song      String
+  coverUrl  String
+  createdAt DateTime @default(now())
+  duration  String
 }
 
 model Party {
-    id        Int      @id @default(autoincrement())
-    hash      String?  @unique
-    name      String
-    createdAt DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  hash        String?  @unique
+  name        String
+  createdAt   DateTime @default(now())
+  /// SHA-256 of the secret key given to the browser that created the party.
+  /// Proves the host when deleting. Null for parties created before this.
+  hostKeyHash String?
 
-    @@index([hash])
+  @@index([hash])
 }

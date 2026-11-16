@@ -17,12 +17,13 @@ import {
 } from "~/components/ui/ui/accordion";
 import { decode } from "html-entities";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export function PartyScene({
   party,
   initialPlaylist,
 }: {
-  party: Party;
+  party: Omit<Party, "hostKeyHash">;
   initialPlaylist?: KaraokeParty;
 }) {
   const [name] = useLocalStorage<string>({ key: "name" });
@@ -58,6 +59,13 @@ export function PartyScene({
     onMessage(event) {
       try {
         const eventData = JSON.parse(event.data);
+
+        if (eventData.type === "party-deleted") {
+          socket.close();
+          toast.info("The host ended this party.");
+          router.replace("/");
+          return;
+        }
 
         if (eventData.type === "horn") {
           // toast.success("You sent a horn!");

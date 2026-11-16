@@ -10,6 +10,7 @@ import { moveInQueue } from "~/utils/playlist";
 import {
 	type KaraokeParty,
 	Message,
+	type PartyDeleted,
 	type SettingsUpdate,
 } from "./types";
 
@@ -260,6 +261,23 @@ export class KaraokeServer extends Server<Env> {
 	}
 
 	async onRequest(req: Request) {
+		if (req.method === "DELETE") {
+			// The host deleted the party: tell everyone, disconnect them and
+			// erase the queue for good.
+			this.broadcast(
+				JSON.stringify({ type: "party-deleted" } satisfies PartyDeleted),
+			);
+			for (const conn of this.getConnections()) {
+				conn.close(1000, "Party deleted");
+			}
+
+			this.karaokeParty = undefined;
+			await this.ctx.storage.deleteAlarm();
+			await this.ctx.storage.deleteAll();
+
+			return new Response(null, { status: 204 });
+		}
+
 		if (req.method === "POST" && !this.karaokeParty) {
 			console.log("Creating new karaoke party");
 

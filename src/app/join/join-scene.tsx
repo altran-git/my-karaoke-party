@@ -19,7 +19,7 @@ import { ButtonHoverGradient } from "~/components/ui/ui/button-hover-gradient";
 import { useEffect } from "react";
 
 const formSchema = z.object({
-  partyCode: z.string().min(8),
+  partyCode: z.string().trim().min(3),
   name: z.string().min(2).max(20),
 });
 
@@ -48,7 +48,7 @@ export default function JoinScene({ partyHash }: { partyHash?: string }) {
 
     setName(values.name);
 
-    router.push(`/party/${partyHash}`);
+    router.push(`/party/${encodeURIComponent(values.partyCode)}`);
   }
 
   useEffect(() => {

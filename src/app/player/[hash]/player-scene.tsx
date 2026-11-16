@@ -22,7 +22,7 @@ import {
 import Image from "next/image";
 import type { Message, KaraokeParty } from "party/types";
 import usePartySocket from "partysocket/react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import useSound from "use-sound";
 import { EmptyPlayer } from "~/components/empty-player";
@@ -33,9 +33,10 @@ import { env } from "~/env";
 import { cn } from "~/lib/utils";
 import { moveInQueue } from "~/utils/playlist";
 import { getUrl } from "~/utils/url";
+import { forgetParty, rememberParty } from "~/utils/recent-parties";
 
 type Props = {
-  party: Party;
+  party: Omit<Party, "hostKeyHash">;
   initialPlaylist: KaraokeParty;
 };
 
@@ -52,6 +53,14 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   // strip can show where it would land.
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Remember this party in this browser so the host can come back to it from
+  // the start page.
+  useEffect(() => {
+    if (party.hash) {
+      rememberParty({ hash: party.hash, name: party.name });
+    }
+  }, [party.hash, party.name]);
 
   const [playHorn] = useSound("/sounds/buzzer.mp3");
   const lastHornTimeRef = useRef<number>(0);
@@ -82,6 +91,14 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
       // TODO: Improve type safety
       const eventData = JSON.parse(event.data);
       console.log(eventData);
+
+      if (eventData.type === "party-deleted") {
+        // The host deleted this party (maybe from another tab or device).
+        if (party.hash) forgetParty(party.hash);
+        socket.close();
+        window.location.replace("/");
+        return;
+      }
 
       if (eventData.type === "horn") {
         playThrottledHorn();
@@ -220,6 +237,12 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
           <h1 className="text-outline scroll-m-20 text-3xl font-extrabold tracking-tight lg:text-4xl">
             {party.name}
           </h1>
+          <p className="mt-1 text-sm text-slate-300">
+            Party code:{" "}
+            <span className="select-all font-mono text-base text-white">
+              {party.hash}
+            </span>
+          </p>
         </div>
         <SongSearch
           key={party.hash}

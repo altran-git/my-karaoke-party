@@ -62,6 +62,9 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   }, [party.hash, party.name]);
 
   const togglePlayPauseRef = useRef<(() => void) | null>(null);
+  const setPlayingRef = useRef<((playing: boolean) => void) | null>(null);
+  // Id of the song on screen, read from inside the socket message handler.
+  const currentVideoIdRef = useRef<string | null>(null);
 
   const socket = usePartySocket({
     host: env.NEXT_PUBLIC_PARTYKIT_URL,
@@ -80,6 +83,14 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
         return;
       }
 
+      if (eventData.type === "playback-command") {
+        // A guest pressed play/pause on their phone. Ignore it if the song
+        // they were looking at is no longer the one on screen.
+        if (eventData.id === currentVideoIdRef.current) {
+          setPlayingRef.current?.(Boolean(eventData.playing));
+        }
+      }
+
       if (eventData.type === "settings") {
         setFairQueue(Boolean(eventData.settings?.orderByFairness));
       }
@@ -94,6 +105,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
 
   const currentVideo = playlist.find((video) => !video.playedAt);
   const nextVideos = playlist.filter((video) => !video.playedAt);
+  currentVideoIdRef.current = currentVideo?.id ?? null;
 
   const addSong = (videoId: string, title: string, coverUrl: string) => {
     const singerName = readLocalStorageValue({
@@ -117,6 +129,17 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
       JSON.stringify({
         type: "remove-video",
         id: videoId,
+      } satisfies Message),
+    );
+  };
+
+  /** Tells guests' phones whether the song on screen is playing. */
+  const reportPlayback = (videoId: string, playing: boolean) => {
+    socket.send(
+      JSON.stringify({
+        type: "report-playback",
+        id: videoId,
+        playing,
       } satisfies Message),
     );
   };
@@ -247,6 +270,10 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                   markAsPlayed();
                 }}
                 onTogglePlayPauseRef={togglePlayPauseRef}
+                onSetPlayingRef={setPlayingRef}
+                onPlayingChange={(playing) =>
+                  reportPlayback(currentVideo.id, playing)
+                }
               />
             ) : (
               <EmptyPlayer

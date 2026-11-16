@@ -41,6 +41,20 @@ const SetFairQueue = z.object({
 	enabled: z.boolean(),
 });
 
+/** A guest asks the player screen to play or pause the song on screen. */
+const SetPlayback = z.object({
+	type: z.literal("set-playback"),
+	id: z.string(),
+	playing: z.boolean(),
+});
+
+/** The player screen reports whether the song on screen is playing. */
+const ReportPlayback = z.object({
+	type: z.literal("report-playback"),
+	id: z.string(),
+	playing: z.boolean(),
+});
+
 export const Message = z.union([
 	AddVideo,
 	RemoveVideo,
@@ -48,7 +62,25 @@ export const Message = z.union([
 	PostponeVideo,
 	MoveVideo,
 	SetFairQueue,
+	SetPlayback,
+	ReportPlayback,
 ]);
+
+export type PlaybackState = {
+	/** Id of the video the state is about. */
+	id: string;
+	playing: boolean;
+};
+
+/** Relayed to the player screen: play or pause video `id`. */
+export type PlaybackCommand = PlaybackState & {
+	type: "playback-command";
+};
+
+/** Relayed to everyone: whether video `id` is playing on the player screen. */
+export type PlaybackUpdate = PlaybackState & {
+	type: "playback";
+};
 
 export type KaraokePartySettings = {
 	orderByFairness: boolean;

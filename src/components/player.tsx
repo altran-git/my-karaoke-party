@@ -285,9 +285,9 @@ export function Player({
         )}
       </div>
 
-      {/* Sits above YouTube's seek bar and controls so it never covers the
-          controls, and lets clicks pass through to the video. */}
-      <div className="pointer-events-none absolute bottom-[4.5rem] left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full text-outline bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
+      {/* Sits in the middle of YouTube's control bar, below the seek bar.
+          Clicks pass through, so the controls under it still work. */}
+      <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full text-outline bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
         {/* Only the text is faded, so the background stays as set above. */}
         <span className="opacity-60">
           {nextVideo ? (

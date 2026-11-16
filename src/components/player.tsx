@@ -39,6 +39,9 @@ export function Player({
   onPlayingChange,
 }: Props) {
   const playerRef = useRef<YouTubePlayer>(null);
+  // Captions are turned off once per song, on its first play, so a guest who
+  // turns them back on with the CC button keeps them across pause/resume.
+  const captionsHandledRef = useRef(false);
 
   const [isReady, setIsReady] = useState(false);
   const [showOpenInYouTubeButton, setShowOpenInYouTubeButton] = useState(false);
@@ -123,19 +126,45 @@ export function Player({
       // Hide YouTube's fullscreen button: it fullscreens only the video and
       // drops our overlay (QR code, Skip). Use the app's fullscreen instead.
       fs: 0,
+      // Ask YouTube not to show captions. This is only a hint: captions the
+      // viewer turned on in their YouTube settings can still appear, so they
+      // are also turned off in onPlayerPlay.
+      cc_load_policy: 0,
     },
+  };
+
+  /**
+   * Turns off YouTube's closed captions. Uses player calls YouTube does not
+   * document, so any failure is ignored. Lyrics that are part of the video
+   * picture itself are not affected.
+   */
+  const disableCaptions = (player: YouTubePlayer) => {
+    try {
+      void player.unloadModule("captions");
+      void player.setOption("captions", "track", {});
+    } catch (error) {
+      console.warn("Could not turn off captions", error);
+    }
   };
 
   const onPlayerReady: YouTubeProps["onReady"] = (event) => {
     console.log("Player ready", { event });
     // access to player in all event handlers via event.target
     playerRef.current = event.target;
+    captionsHandledRef.current = false;
 
     setIsReady(true);
   };
 
-  const onPlayerPlay: YouTubeProps["onPlay"] = (_event) => {
+  const onPlayerPlay: YouTubeProps["onPlay"] = (event) => {
     console.log("handlePlay");
+
+    // The captions module loads only once playback starts, so this can't be
+    // done in onReady.
+    if (!captionsHandledRef.current) {
+      captionsHandledRef.current = true;
+      disableCaptions(event.target);
+    }
     setIsPlaying(true);
     onPlayingChange?.(true);
 

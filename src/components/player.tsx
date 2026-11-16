@@ -15,6 +15,8 @@ import { Spinner } from "./ui/ui/spinner";
 type Props = {
   joinPartyUrl: string;
   video: VideoInPlaylist;
+  /** The song queued after this one, shown in a small "Up next" line. */
+  nextVideo?: VideoInPlaylist;
   isFullscreen: boolean;
   onPlayerEnd: () => void;
   onTogglePlayPauseRef?: React.MutableRefObject<(() => void) | null>;
@@ -29,6 +31,7 @@ type Props = {
 export function Player({
   joinPartyUrl,
   video,
+  nextVideo,
   isFullscreen = false,
   onPlayerEnd,
   onTogglePlayPauseRef,
@@ -281,6 +284,19 @@ export function Player({
           </div>
         )}
       </div>
+
+      {nextVideo && (
+        // Sits just above YouTube's control bar so it never covers the
+        // controls, and lets clicks pass through to the video.
+        <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/60 px-4 py-1 text-center text-sm text-white lg:text-base">
+          <span className="font-semibold uppercase tracking-wide text-primary">
+            Up next:
+          </span>{" "}
+          {decode(nextVideo.title)}
+          <span className="text-slate-300"> · requested by </span>
+          <span className="font-semibold">{nextVideo.singerName}</span>
+        </div>
+      )}
 
       <div className="pointer-events-none absolute bottom-32 left-0 z-10 flex w-full flex-row justify-between px-4">
         {/* ml-12 keeps the QR code clear of the edge on TVs that crop the

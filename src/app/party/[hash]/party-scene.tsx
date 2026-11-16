@@ -43,10 +43,6 @@ export function PartyScene({
     initialPlaylist?.playlist ?? [],
   );
 
-  const [fairQueue, setFairQueue] = useState(
-    initialPlaylist?.settings?.orderByFairness ?? true,
-  );
-
   // What the player screen last reported about the song on screen.
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
 
@@ -88,10 +84,6 @@ export function PartyScene({
             id: String(eventData.id),
             playing: Boolean(eventData.playing),
           });
-        }
-
-        if (eventData.type === "settings") {
-          setFairQueue(Boolean(eventData.settings?.orderByFairness));
         }
 
         // If it's an array, it's the playlist update
@@ -143,13 +135,6 @@ export function PartyScene({
         toIndex,
       } satisfies Message),
     );
-
-    if (fairQueue) {
-      // The server turns fair ordering off so the next added song doesn't
-      // undo this move. Say so, instead of letting it change silently.
-      setFairQueue(false);
-      toast.info("Fair queue paused - the playlist is now sorted manually.");
-    }
   };
 
   const nextVideos = playlist.filter((video) => !video.playedAt);

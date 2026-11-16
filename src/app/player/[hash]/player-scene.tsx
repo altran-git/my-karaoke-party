@@ -15,12 +15,12 @@ import {
   Maximize,
   Minimize,
   MoveDown,
-  Shuffle,
+  ListStart,
   SkipForward,
   X,
 } from "lucide-react";
 import Image from "next/image";
-import type { Message, KaraokeParty } from "party/types";
+import type { AddSongsTo, Message, KaraokeParty } from "party/types";
 import usePartySocket from "partysocket/react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
@@ -44,8 +44,8 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
     initialPlaylist.playlist ?? [],
   );
 
-  const [fairQueue, setFairQueue] = useState(
-    initialPlaylist.settings?.orderByFairness ?? true,
+  const [addSongsTo, setAddSongsTo] = useState<AddSongsTo>(
+    initialPlaylist.settings?.addSongsTo ?? "end",
   );
 
   // Ids of the song being dragged and of the slot it is hovering over, so the
@@ -96,7 +96,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
       }
 
       if (eventData.type === "settings") {
-        setFairQueue(Boolean(eventData.settings?.orderByFairness));
+        setAddSongsTo(eventData.settings?.addSongsTo === "top" ? "top" : "end");
       }
 
       if (Array.isArray(eventData)) {
@@ -188,31 +188,24 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
         toIndex,
       } satisfies Message),
     );
-
-    if (fairQueue) {
-      // The server turns fair ordering off so the next added song doesn't
-      // undo this move. Say so, instead of letting it change silently.
-      setFairQueue(false);
-      toast.info("Fair queue paused - the playlist is now sorted manually.");
-    }
   };
 
-  const toggleFairQueue = () => {
-    const enabled = !fairQueue;
+  const toggleAddSongsTo = () => {
+    const mode = addSongsTo === "top" ? "end" : "top";
 
-    setFairQueue(enabled);
+    setAddSongsTo(mode);
 
     socket.send(
       JSON.stringify({
-        type: "set-fair-queue",
-        enabled,
+        type: "set-add-songs-to",
+        mode,
       } satisfies Message),
     );
 
     toast.info(
-      enabled
-        ? "Fair queue on - songs are spread out between singers again."
-        : "Fair queue off - songs stay in the order you set.",
+      mode === "top"
+        ? "Top - new songs play next."
+        : "Default - new songs go to the end of the queue.",
     );
   };
 
@@ -293,18 +286,20 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                 variant="ghost"
                 size="icon"
                 title={
-                  fairQueue
-                    ? "Fair queue on - click to sort the playlist manually"
-                    : "Manual order - click to spread songs between singers again"
+                  addSongsTo === "top"
+                    ? "Top - new songs play next. Click to add them to the end instead"
+                    : "Default - new songs go to the end. Click to have them play next instead"
                 }
-                onClick={toggleFairQueue}
+                onClick={toggleAddSongsTo}
               >
-                <Shuffle
-                  className={fairQueue ? "text-emerald-400" : "text-slate-400"}
+                <ListStart
+                  className={
+                    addSongsTo === "top" ? "text-emerald-400" : "text-slate-400"
+                  }
                 />
               </Button>
               <span className="text-[10px] uppercase tracking-wide text-slate-400">
-                {fairQueue ? "Fair" : "Manual"}
+                {addSongsTo === "top" ? "Top" : "Default"}
               </span>
             </div>
             {nextVideos.length > 0 ? (

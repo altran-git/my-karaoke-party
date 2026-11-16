@@ -36,9 +36,12 @@ const MoveVideo = z.object({
 	toIndex: z.number().int().nonnegative(),
 });
 
-const SetFairQueue = z.object({
-	type: z.literal("set-fair-queue"),
-	enabled: z.boolean(),
+/** Where newly requested songs go: "end" of the queue, or "top" (next in line). */
+export const AddSongsTo = z.enum(["end", "top"]);
+
+const SetAddSongsTo = z.object({
+	type: z.literal("set-add-songs-to"),
+	mode: AddSongsTo,
 });
 
 /**
@@ -64,7 +67,7 @@ export const Message = z.union([
 	MarkAsPlayed,
 	PostponeVideo,
 	MoveVideo,
-	SetFairQueue,
+	SetAddSongsTo,
 	SetPlayback,
 	ReportPlayback,
 ]);
@@ -87,8 +90,11 @@ export type PlaybackUpdate = PlaybackState & {
 	type: "playback";
 };
 
+export type AddSongsTo = z.infer<typeof AddSongsTo>;
+
 export type KaraokePartySettings = {
-	orderByFairness: boolean;
+	/** Missing on parties saved before this setting existed: treat as "end". */
+	addSongsTo?: AddSongsTo;
 };
 
 export type Message = z.infer<typeof Message>;

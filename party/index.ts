@@ -5,7 +5,6 @@ import {
 	Server,
 	type WSMessage,
 } from "partyserver";
-import { orderByFairness } from "~/utils/array";
 import { moveInQueue } from "~/utils/playlist";
 import {
 	type KaraokeParty,
@@ -131,7 +130,7 @@ export class KaraokeServer extends Server<Env> {
 						(video) => video.id === data.id && !video.playedAt,
 					)
 				) {
-					this.karaokeParty.playlist.push({
+					const video = {
 						id: data.id,
 						title: data.title,
 						artist: "Some artist",
@@ -142,11 +141,20 @@ export class KaraokeServer extends Server<Env> {
 						playedAt: null,
 						postponedAt: null,
 						duration: data.duration ?? undefined,
-					});
+					};
 
-					// New requests always go to the end of the queue, even with the
-					// fair queue on: re-sorting here would let a newcomer's song jump
-					// ahead of songs that were requested earlier.
+					const playlist = this.karaokeParty.playlist;
+
+					if (this.karaokeParty.settings.addSongsTo === "top") {
+						// Next in line: right behind the song playing now, which
+						// stays put. With nothing playing it simply goes first.
+						const playingIndex = playlist.findIndex((v) => !v.playedAt);
+						const insertAt =
+							playingIndex === -1 ? playlist.length : playingIndex + 1;
+						playlist.splice(insertAt, 0, video);
+					} else {
+						playlist.push(video);
+					}
 
 					await this.savekaraokeParty();
 					this.broadcast(JSON.stringify(this.karaokeParty.playlist));
@@ -214,27 +222,19 @@ export class KaraokeServer extends Server<Env> {
 				if (reordered !== this.karaokeParty.playlist) {
 					this.karaokeParty.playlist = reordered;
 
-					// The host just said where this song goes: the queue is no longer
-					// in fair order, so show it as manually sorted.
-					this.karaokeParty.settings.orderByFairness = false;
-
 					await this.savekaraokeParty();
-					this.broadcastParty();
+					this.broadcast(JSON.stringify(reordered));
 				}
 
 				break;
 			}
 
-			case "set-fair-queue": {
-				if (this.karaokeParty.settings.orderByFairness === data.enabled) {
+			case "set-add-songs-to": {
+				if ((this.karaokeParty.settings.addSongsTo ?? "end") === data.mode) {
 					break;
 				}
 
-				this.karaokeParty.settings.orderByFairness = data.enabled;
-
-				if (data.enabled) {
-					this.reorderPlaylistByFairness();
-				}
+				this.karaokeParty.settings.addSongsTo = data.mode;
 
 				await this.savekaraokeParty();
 				this.broadcastParty();
@@ -321,7 +321,7 @@ export class KaraokeServer extends Server<Env> {
 			this.karaokeParty = {
 				playlist: [],
 				settings: {
-					orderByFairness: true,
+					addSongsTo: "end",
 				},
 			};
 
@@ -364,34 +364,6 @@ export class KaraokeServer extends Server<Env> {
 		this.karaokeParty = undefined;
 		this.playback = undefined;
 		await this.ctx.storage.deleteAll();
-	}
-
-	reorderPlaylistByFairness() {
-		if (!this.karaokeParty || this.karaokeParty.playlist.length === 0) return;
-
-		const ordered = orderByFairness(
-			this.karaokeParty.playlist,
-			(video) => video.singerName,
-			(a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-		);
-
-		const playedVideos = this.karaokeParty.playlist.filter(
-			(video) => video.playedAt,
-		);
-		const currentVideo = this.karaokeParty.playlist.find((v) => !v.playedAt);
-		const nextVideos = ordered.filter(
-			(video) => !video.playedAt && video !== currentVideo,
-		);
-
-		const newPlaylist = [...playedVideos];
-
-		if (currentVideo) {
-			newPlaylist.push(currentVideo);
-		}
-
-		newPlaylist.push(...nextVideos);
-
-		this.karaokeParty.playlist = newPlaylist;
 	}
 }
 

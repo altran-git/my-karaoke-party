@@ -8,7 +8,9 @@ export const youtubeRouter = createTRPCRouter({
     .query(async ({ input, ctx }) => {
       log.info("Searching for videos", { keyword: input.keyword });
 
-      const cacheKey = `youtube-search:${input.keyword}`;
+      // "v2": results now leave out videos that can't be embedded. A new key
+      // stops older cached results that still include them from being used.
+      const cacheKey = `youtube-search:v2:${input.keyword}`;
 
       const cachedVideos =
         await ctx.cache.get<ReturnType<typeof ctx.youtube.searchVideo>>(

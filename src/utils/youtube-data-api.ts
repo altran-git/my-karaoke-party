@@ -106,6 +106,9 @@ class YouTubeDataAPI {
               key: apiKey,
               part: "snippet",
               type: "video",
+              // Leave out videos whose owners have turned off playback on
+              // other sites: they can't play in the party player.
+              videoEmbeddable: "true",
               q: query,
               maxResults,
             },

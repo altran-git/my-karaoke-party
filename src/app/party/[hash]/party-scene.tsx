@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { env } from "~/env";
 import { readLocalStorageValue, useLocalStorage } from "@mantine/hooks";
 import { SongSearch } from "~/components/song-search";
-import { ChevronDown, ChevronUp, ListMusic, Megaphone, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ListMusic, X } from "lucide-react";
 import { moveInQueue } from "~/utils/playlist";
 import {
   Accordion,
@@ -70,12 +70,6 @@ export function PartyScene({
           toast.info("The host ended this party.");
           router.replace("/");
           return;
-        }
-
-        if (eventData.type === "horn") {
-          // toast.success("You sent a horn!");
-          // playHorn(); // Play the horn sound
-          // return;
         }
 
         if (eventData.type === "settings") {
@@ -140,14 +134,6 @@ export function PartyScene({
     }
   };
 
-  const sendHorn = async () => {
-    socket.send(
-      JSON.stringify({
-        type: "horn",
-      } satisfies Message)
-    );
-  }
-
   const nextVideos = playlist.filter((video) => !video.playedAt);
   const nextVideo = nextVideos[0] ?? null;
 
@@ -163,16 +149,6 @@ export function PartyScene({
         <div className="mt-5">
           <SongSearch onVideoAdded={addSong} playlist={playlist} />
         </div>
-      </div>
-
-      <div className="fixed bottom-16 left-1/2 transform -translate-x-1/2 z-[100]">
-        <button
-          type="button"
-          className="rounded-full bg-yellow-200 p-2 text-black hover:text-white hover:bg-red-700 shadow-lg"
-          onClick={sendHorn}
-        >
-          <Megaphone size={32} />
-        </button>
       </div>
 
       <div className="fixed bottom-0 z-50 flex flex-col w-full items-center bg-primary p-2 text-primary-foreground text-white">

@@ -32,6 +32,17 @@ export function Player({
   const [isReady, setIsReady] = useState(false);
   const [showOpenInYouTubeButton, setShowOpenInYouTubeButton] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  // The song title and singer stay on screen for this long after the song
+  // starts, then hide while it plays. They show again whenever it's paused.
+  const SONG_INFO_DURATION_MS = 10_000;
+  const [songInfoTimeUp, setSongInfoTimeUp] = useState(false);
+  const songInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (songInfoTimerRef.current) clearTimeout(songInfoTimerRef.current);
+    };
+  }, []);
 
   const togglePlayPause = useCallback(() => {
     if (playerRef.current && isReady) {
@@ -81,6 +92,13 @@ export function Player({
   const onPlayerPlay: YouTubeProps["onPlay"] = (_event) => {
     console.log("handlePlay");
     setIsPlaying(true);
+
+    if (!songInfoTimerRef.current) {
+      songInfoTimerRef.current = setTimeout(
+        () => setSongInfoTimeUp(true),
+        SONG_INFO_DURATION_MS,
+      );
+    }
   };
 
   const onPlayerPause: YouTubeProps["onPause"] = (_event) => {
@@ -192,7 +210,7 @@ export function Player({
       <div
         className={cn(
           "absolute top-0 w-full text-center animate-in fade-in zoom-in",
-          isPlaying ? "hidden" : "block"
+          isPlaying && songInfoTimeUp ? "hidden" : "block"
         )}
       >
         <div

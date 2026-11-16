@@ -221,13 +221,13 @@ export function Player({
       </div>
 
       <div className="pointer-events-none absolute bottom-32 left-0 z-10 flex w-full flex-row justify-between px-4">
-        {/* ml-16 keeps the QR code clear of the edge on TVs that crop the
+        {/* ml-12 keeps the QR code clear of the edge on TVs that crop the
             picture (overscan), so it can still be scanned. size is smaller
             than the 128px default so it covers less of the lyrics. */}
         <QrCode
           url={joinPartyUrl}
           size={100}
-          className="pointer-events-auto ml-16"
+          className="pointer-events-auto ml-12"
         />
 
         <div

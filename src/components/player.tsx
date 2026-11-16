@@ -285,21 +285,24 @@ export function Player({
         )}
       </div>
 
-      {/* Sits just above YouTube's control bar so it never covers the
-          controls, and lets clicks pass through to the video. */}
-      <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/60 px-4 py-1 text-center text-sm text-white lg:text-base">
-        {nextVideo ? (
-          <>
-            <span className="font-semibold uppercase tracking-wide text-primary">
-              Up next:
-            </span>{" "}
-            {decode(nextVideo.title)}
-            <span className="text-slate-300"> · requested by </span>
-            <span className="font-semibold">{nextVideo.singerName}</span>
-          </>
-        ) : (
-          <span className="text-slate-300">No songs in queue</span>
-        )}
+      {/* Sits in the middle of YouTube's control bar, below the seek bar.
+          Clicks pass through, so the controls under it still work. */}
+      <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full text-outline bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
+        {/* Only the text is faded, so the background stays as set above. */}
+        <span className="opacity-60">
+          {nextVideo ? (
+            <>
+              <span className="font-semibold uppercase tracking-wide text-primary">
+                Up next:
+              </span>{" "}
+              {decode(nextVideo.title)}
+              <span className="text-slate-300"> · requested by </span>
+              <span className="font-semibold">{nextVideo.singerName}</span>
+            </>
+          ) : (
+            <span className="text-slate-300">No songs in queue</span>
+          )}
+        </span>
       </div>
 
       <div className="pointer-events-none absolute bottom-32 left-0 z-10 flex w-full flex-row justify-between px-4">

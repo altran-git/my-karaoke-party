@@ -339,7 +339,7 @@ export function Player({
           seek bar. right-16 keeps them clear of the edge on TVs that crop the
           picture (overscan), so the code can still be scanned. size is
           smaller than the 128px default so it covers less of the lyrics. */}
-      <div className="pointer-events-none absolute bottom-14 right-16 z-10 flex flex-col items-end">
+      <div className="pointer-events-none absolute bottom-20 right-16 z-10 flex flex-col items-end">
         <QrCode
           url={joinPartyUrl}
           size={100}
@@ -347,7 +347,7 @@ export function Player({
         />
 
         <div
-          className={`pointer-events-auto pt-2 ${
+          className={`pointer-events-auto pt-1 ${
             // Hide Skip while playing fullscreen, and always on the last song
             // in the queue (there's nothing to skip to).
             !nextVideo || (isPlaying && isFullscreen) ? "hidden" : "block"

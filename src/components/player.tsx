@@ -314,9 +314,9 @@ export function Player({
 
         <div
           className={`pointer-events-auto self-end p-2 ${
-            // Hide Skip while playing fullscreen, and while the last song in
-            // the queue is playing (there's nothing to skip to).
-            isPlaying && (isFullscreen || !nextVideo) ? "hidden" : "block"
+            // Hide Skip while playing fullscreen, and always on the last song
+            // in the queue (there's nothing to skip to).
+            !nextVideo || (isPlaying && isFullscreen) ? "hidden" : "block"
           }`}
         >
           <Button

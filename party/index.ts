@@ -11,6 +11,9 @@ import {
 	type KaraokeParty,
 	Message,
 	type PartyDeleted,
+	type PlaybackCommand,
+	type PlaybackState,
+	type PlaybackUpdate,
 	type SettingsUpdate,
 } from "./types";
 
@@ -54,6 +57,9 @@ export class KaraokeServer extends Server<Env> {
 
 	karaokeParty: KaraokeParty | undefined;
 
+	/** Last play/pause state the player screen reported, sent to guests as they join. */
+	playback: PlaybackState | undefined;
+
 	async fetch(request: Request): Promise<Response> {
 		// Only parties created through the app (an authorized POST) can be joined.
 		// Refuse the WebSocket upgrade for made-up room names before it is opened.
@@ -73,9 +79,19 @@ export class KaraokeServer extends Server<Env> {
 	async onStart() {
 		this.karaokeParty =
 			await this.ctx.storage.get<KaraokeParty>("karaokeParty");
+		this.playback = await this.ctx.storage.get<PlaybackState>("playback");
 	}
 
 	async onConnect(conn: Connection, ctx: ConnectionContext) {
+		if (this.playback) {
+			conn.send(
+				JSON.stringify({
+					type: "playback",
+					...this.playback,
+				} satisfies PlaybackUpdate),
+			);
+		}
+
 		// A websocket just connected!
 		console.log(
 			`Connected:
@@ -248,6 +264,32 @@ export class KaraokeServer extends Server<Env> {
 				break;
 			}
 
+			case "set-playback": {
+				// Only the player screen acts on this; it then reports the new
+				// state back with "report-playback".
+				this.broadcast(
+					JSON.stringify({
+						type: "playback-command",
+						id: data.id,
+						playing: data.playing,
+					} satisfies PlaybackCommand),
+				);
+				break;
+			}
+
+			case "report-playback": {
+				this.playback = { id: data.id, playing: data.playing };
+				await this.ctx.storage.put<PlaybackState>("playback", this.playback);
+
+				this.broadcast(
+					JSON.stringify({
+						type: "playback",
+						...this.playback,
+					} satisfies PlaybackUpdate),
+				);
+				break;
+			}
+
 			default: {
 				console.error("Unknown message type", data);
 			}
@@ -266,6 +308,7 @@ export class KaraokeServer extends Server<Env> {
 			}
 
 			this.karaokeParty = undefined;
+			this.playback = undefined;
 			await this.ctx.storage.deleteAlarm();
 			await this.ctx.storage.deleteAll();
 
@@ -319,6 +362,7 @@ export class KaraokeServer extends Server<Env> {
 	async onAlarm() {
 		// The party has been idle for EXPIRY_PERIOD_MILLISECONDS: forget it.
 		this.karaokeParty = undefined;
+		this.playback = undefined;
 		await this.ctx.storage.deleteAll();
 	}
 

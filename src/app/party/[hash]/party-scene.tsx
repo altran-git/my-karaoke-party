@@ -8,7 +8,15 @@ import { useEffect, useState } from "react";
 import { env } from "~/env";
 import { readLocalStorageValue, useLocalStorage } from "@mantine/hooks";
 import { SongSearch } from "~/components/song-search";
-import { ChevronDown, ChevronUp, ListMusic, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ListMusic,
+  Pause,
+  Play,
+  X,
+} from "lucide-react";
+import type { PlaybackState } from "party/types";
 import { moveInQueue } from "~/utils/playlist";
 import {
   Accordion,
@@ -38,6 +46,9 @@ export function PartyScene({
   const [fairQueue, setFairQueue] = useState(
     initialPlaylist?.settings?.orderByFairness ?? true,
   );
+
+  // What the player screen last reported about the song on screen.
+  const [playback, setPlayback] = useState<PlaybackState | null>(null);
 
   useEffect(() => {
     const value = readLocalStorageValue({ key: "name" });
@@ -70,6 +81,13 @@ export function PartyScene({
           toast.info("The host ended this party.");
           router.replace("/");
           return;
+        }
+
+        if (eventData.type === "playback") {
+          setPlayback({
+            id: String(eventData.id),
+            playing: Boolean(eventData.playing),
+          });
         }
 
         if (eventData.type === "settings") {
@@ -137,6 +155,24 @@ export function PartyScene({
   const nextVideos = playlist.filter((video) => !video.playedAt);
   const nextVideo = nextVideos[0] ?? null;
 
+  // Only trust the reported state if it is about the song on screen now.
+  const knowsPlayback = !!nextVideo && playback?.id === nextVideo.id;
+  const isPlaying = knowsPlayback && playback.playing;
+
+  const togglePlayback = () => {
+    if (!nextVideo) return;
+
+    socket.send(
+      JSON.stringify({
+        type: "set-playback",
+        id: nextVideo.id,
+        // Without a report from the player screen yet, let it toggle
+        // instead of guessing which state the song is in.
+        ...(knowsPlayback ? { playing: !isPlaying } : {}),
+      } satisfies Message),
+    );
+  };
+
   return (
     <>
       <div className="container mx-auto p-6 pb-16 text-center">
@@ -151,8 +187,24 @@ export function PartyScene({
         </div>
       </div>
 
-      <div className="fixed bottom-0 z-50 flex flex-col w-full items-center bg-primary p-2 text-primary-foreground text-white">
-        <Accordion type="single" collapsible className="max-h-screen w-full">
+      <div className="fixed bottom-0 z-50 flex w-full flex-row items-start gap-2 bg-primary p-2 text-primary-foreground text-white">
+        <button
+          type="button"
+          aria-label={isPlaying ? "Pause" : "Play"}
+          title={
+            isPlaying ? "Pause the song on screen" : "Play the song on screen"
+          }
+          className="mt-2 shrink-0 rounded-full bg-white/15 p-2 hover:bg-white/30 disabled:opacity-30"
+          disabled={!nextVideo}
+          onClick={togglePlayback}
+        >
+          {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+        </button>
+        <Accordion
+          type="single"
+          collapsible
+          className="max-h-screen min-w-0 grow"
+        >
           <AccordionItem value="item-1" className="border-0">
             <AccordionTrigger disabled={nextVideos.length < 1}>
               <div className="flex min-w-0 flex-row text-left">

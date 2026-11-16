@@ -18,6 +18,12 @@ type Props = {
   isFullscreen: boolean;
   onPlayerEnd: () => void;
   onTogglePlayPauseRef?: React.MutableRefObject<(() => void) | null>;
+  /** Filled in with a function that plays (true) or pauses (false) the video. */
+  onSetPlayingRef?: React.MutableRefObject<
+    ((playing?: boolean) => void) | null
+  >;
+  /** Called whenever the video starts or stops playing. */
+  onPlayingChange?: (playing: boolean) => void;
 };
 
 export function Player({
@@ -26,6 +32,8 @@ export function Player({
   isFullscreen = false,
   onPlayerEnd,
   onTogglePlayPauseRef,
+  onSetPlayingRef,
+  onPlayingChange,
 }: Props) {
   const playerRef = useRef<YouTubePlayer>(null);
 
@@ -65,6 +73,40 @@ export function Player({
     }
   }, [onTogglePlayPauseRef, togglePlayPause, isReady]);
 
+  /** Plays (true) or pauses (false) the video; toggles when `playing` is omitted. */
+  const setPlaying = useCallback(
+    (playing?: boolean) => {
+      if (!playerRef.current || !isReady) return;
+
+      // YouTube player states: 1 playing, 3 buffering (about to play)
+      const state = playerRef.current.getPlayerState();
+      const isNowPlaying = state === 1 || state === 3;
+      const target = playing ?? !isNowPlaying;
+
+      if (target === isNowPlaying) {
+        // Nothing to change, so no play/pause event will fire: report the
+        // state anyway so the phone that asked shows the right button.
+        onPlayingChange?.(isNowPlaying);
+      } else if (target) {
+        playerRef.current.playVideo();
+      } else {
+        playerRef.current.pauseVideo();
+      }
+    },
+    [isReady, onPlayingChange],
+  );
+
+  // Set ref for remote play/pause (from guests' phones)
+  useEffect(() => {
+    if (!onSetPlayingRef) return;
+
+    onSetPlayingRef.current = isReady ? setPlaying : null;
+
+    return () => {
+      onSetPlayingRef.current = null;
+    };
+  }, [onSetPlayingRef, setPlaying, isReady]);
+
   const opts: YouTubeProps["opts"] = {
     playerVars: {
       // https://developers.google.com/youtube/player_parameters
@@ -92,6 +134,7 @@ export function Player({
   const onPlayerPlay: YouTubeProps["onPlay"] = (_event) => {
     console.log("handlePlay");
     setIsPlaying(true);
+    onPlayingChange?.(true);
 
     if (!songInfoTimerRef.current) {
       songInfoTimerRef.current = setTimeout(
@@ -104,6 +147,7 @@ export function Player({
   const onPlayerPause: YouTubeProps["onPause"] = (_event) => {
     console.log("handlePause");
     setIsPlaying(false);
+    onPlayingChange?.(false);
   };
 
   const onPlayerError: YouTubeProps["onError"] = (_event) => {

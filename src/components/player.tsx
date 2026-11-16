@@ -287,7 +287,7 @@ export function Player({
 
       {/* Sits just above YouTube's control bar so it never covers the
           controls, and lets clicks pass through to the video. */}
-      <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/60 px-4 py-1 text-center text-sm text-white lg:text-base">
+      <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/40 px-4 py-1 text-center text-sm text-white lg:text-base">
         {nextVideo ? (
           <>
             <span className="font-semibold uppercase tracking-wide text-primary">

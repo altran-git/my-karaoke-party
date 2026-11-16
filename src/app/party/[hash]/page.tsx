@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { type KaraokeParty } from "party/types";
 import { fetchPartyServer } from "~/server/party-server";
 import { api } from "~/trpc/server";
@@ -27,8 +27,13 @@ export default async function PartyHashPage({ params }: Props) {
 
   const party = await api.party.getByHash({ hash: partyHash });
 
-  if (!party) {
+  if (!party?.hash) {
     return <div>Party not found</div>;
+  }
+
+  // The code may have been typed with different capitals or spaces.
+  if (party.hash !== partyHash) {
+    redirect(`/party/${party.hash}`);
   }
 
   const req = await fetchPartyServer(partyHash, {

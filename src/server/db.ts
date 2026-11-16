@@ -19,6 +19,11 @@ const db = prisma.$extends({
   model: {
     party: {
       async createWithHash(args: Prisma.PartyCreateInput) {
+        // A custom code chosen by the host is used as the hash as-is.
+        if (args.hash) {
+          return await prisma.party.create({ data: args });
+        }
+
         return await prisma.$transaction(async (tx) => {
           const party = await tx.party.create({ data: args });
 

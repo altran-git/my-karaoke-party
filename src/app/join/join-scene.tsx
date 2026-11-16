@@ -19,7 +19,7 @@ import { ButtonHoverGradient } from "~/components/ui/ui/button-hover-gradient";
 import { useEffect } from "react";
 
 const formSchema = z.object({
-  partyCode: z.string().trim().min(8),
+  partyCode: z.string().trim().min(3),
   name: z.string().min(2).max(20),
 });
 

@@ -1,6 +1,6 @@
 import { api } from "~/trpc/server";
 import { fetchPartyServer } from "~/server/party-server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { type KaraokeParty } from "party/types";
 import PlayerScene from "./player-scene";
 
@@ -23,22 +23,23 @@ export async function generateMetadata({ params }: Props) {
 }
 
 export default async function PartyPage({ params }: Props) {
-  const partyHash = params.hash;
+  const party = await api.party.getByHash({ hash: params.hash });
 
-  const partyPromise = api.party.getByHash({ hash: partyHash });
+  if (!party?.hash) {
+    notFound();
+  }
 
-  const req = fetchPartyServer(partyHash, {
+  // The code may have been typed with different capitals or spaces.
+  if (party.hash !== params.hash) {
+    redirect(`/player/${party.hash}`);
+  }
+
+  const partyKitRes = await fetchPartyServer(party.hash, {
     method: "GET",
     next: {
       revalidate: 0,
     },
   });
-
-  const [party, partyKitRes] = await Promise.all([partyPromise, req]);
-
-  if (!party) {
-    notFound();
-  }
 
   if (!partyKitRes.ok) {
     if (partyKitRes.status === 404) {

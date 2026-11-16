@@ -28,6 +28,7 @@ const canvasStyles = {
 export function CreateParty() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
 
   const createParty = api.party.create.useMutation({
     onSuccess: (party) => {
@@ -85,7 +86,7 @@ export function CreateParty() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          createParty.mutate({ name });
+          createParty.mutate({ name, code: code.trim() || undefined });
         }}
         className="flex flex-col gap-2"
       >
@@ -101,6 +102,28 @@ export function CreateParty() {
           className="text-lg"
           autoFocus
         />
+
+        <Input
+          name="code"
+          type="text"
+          placeholder="Custom party code (optional), e.g. andy-bday"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            if (createParty.isError) createParty.reset();
+          }}
+          maxLength={30}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          className="font-mono"
+        />
+
+        {createParty.error && (
+          <p role="alert" className="text-sm font-medium text-red-200">
+            {createParty.error.message}
+          </p>
+        )}
 
         {/* <AnimatedGradientText>
           🎉 <hr className="mx-2 h-4 w-[1px] shrink-0 bg-gray-300" />{" "}

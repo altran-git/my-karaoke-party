@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type CSSProperties, useCallback, useRef, useState } from "react";
 import ReactCanvasConfetti from "react-canvas-confetti";
 import { api } from "~/trpc/react";
+import { rememberParty } from "~/utils/recent-parties";
 import { Input } from "./ui/ui/input";
 import { ButtonHoverGradient } from "./ui/ui/button-hover-gradient";
 
@@ -30,6 +31,10 @@ export function CreateParty() {
 
   const createParty = api.party.create.useMutation({
     onSuccess: (party) => {
+      if (party.hash) {
+        rememberParty({ hash: party.hash, name: party.name });
+      }
+
       fire(); // Trigger the confetti animation
 
       // Redirect to the party page

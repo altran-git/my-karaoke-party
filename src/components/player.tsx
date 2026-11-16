@@ -256,7 +256,8 @@ export function Player({
       />
       <div
         className={cn(
-          "absolute top-0 w-full text-center animate-in fade-in zoom-in",
+          // pointer-events-none: clicks go through to YouTube's controls.
+          "pointer-events-none absolute top-0 w-full text-center animate-in fade-in zoom-in",
           isPlaying && songInfoTimeUp ? "hidden" : "block"
         )}
       >

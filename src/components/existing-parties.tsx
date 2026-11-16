@@ -85,12 +85,9 @@ export function ExistingParties() {
             <li key={p.hash} className="flex items-center gap-2">
               <Link
                 href={`/player/${p.hash}`}
-                className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded px-2 py-1 hover:bg-white/10"
+                className="flex min-w-0 flex-1 items-center rounded px-2 py-1 hover:bg-white/10"
               >
                 <span className="truncate">{p.name}</span>
-                <span className="shrink-0 font-mono text-sm opacity-70">
-                  {p.hash}
-                </span>
               </Link>
               <button
                 type="button"
@@ -121,7 +118,7 @@ export function ExistingParties() {
               setCode(e.target.value);
               setError(null);
             }}
-            placeholder="e.g. aB3dE5fG"
+            placeholder="Enter your party code"
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}

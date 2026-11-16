@@ -285,18 +285,22 @@ export function Player({
         )}
       </div>
 
-      {nextVideo && (
-        // Sits just above YouTube's control bar so it never covers the
-        // controls, and lets clicks pass through to the video.
-        <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/60 px-4 py-1 text-center text-sm text-white lg:text-base">
-          <span className="font-semibold uppercase tracking-wide text-primary">
-            Up next:
-          </span>{" "}
-          {decode(nextVideo.title)}
-          <span className="text-slate-300"> · requested by </span>
-          <span className="font-semibold">{nextVideo.singerName}</span>
-        </div>
-      )}
+      {/* Sits just above YouTube's control bar so it never covers the
+          controls, and lets clicks pass through to the video. */}
+      <div className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/60 px-4 py-1 text-center text-sm text-white lg:text-base">
+        {nextVideo ? (
+          <>
+            <span className="font-semibold uppercase tracking-wide text-primary">
+              Up next:
+            </span>{" "}
+            {decode(nextVideo.title)}
+            <span className="text-slate-300"> · requested by </span>
+            <span className="font-semibold">{nextVideo.singerName}</span>
+          </>
+        ) : (
+          <span className="text-slate-300">No songs in queue</span>
+        )}
+      </div>
 
       <div className="pointer-events-none absolute bottom-32 left-0 z-10 flex w-full flex-row justify-between px-4">
         {/* ml-12 keeps the QR code clear of the edge on TVs that crop the
@@ -310,7 +314,9 @@ export function Player({
 
         <div
           className={`pointer-events-auto self-end p-2 ${
-            isPlaying && isFullscreen ? "hidden" : "block"
+            // Hide Skip while playing fullscreen, and while the last song in
+            // the queue is playing (there's nothing to skip to).
+            isPlaying && (isFullscreen || !nextVideo) ? "hidden" : "block"
           }`}
         >
           <Button

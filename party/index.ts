@@ -248,12 +248,6 @@ export class KaraokeServer extends Server<Env> {
 				break;
 			}
 
-			case "horn": {
-				// Just broadcast the horn event to all clients
-				this.broadcast(JSON.stringify({ type: "horn" }));
-				break;
-			}
-
 			default: {
 				console.error("Unknown message type", data);
 			}

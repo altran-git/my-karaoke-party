@@ -41,10 +41,6 @@ const SetFairQueue = z.object({
 	enabled: z.boolean(),
 });
 
-const Horn = z.object({
-	type: z.literal("horn"),
-});
-
 export const Message = z.union([
 	AddVideo,
 	RemoveVideo,
@@ -52,7 +48,6 @@ export const Message = z.union([
 	PostponeVideo,
 	MoveVideo,
 	SetFairQueue,
-	Horn,
 ]);
 
 export type KaraokePartySettings = {

@@ -24,7 +24,6 @@ import type { Message, KaraokeParty } from "party/types";
 import usePartySocket from "partysocket/react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import useSound from "use-sound";
 import { EmptyPlayer } from "~/components/empty-player";
 import { Player } from "~/components/player";
 import { SongSearch } from "~/components/song-search";
@@ -62,26 +61,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
     }
   }, [party.hash, party.name]);
 
-  const [playHorn] = useSound("/sounds/buzzer.mp3");
-  const lastHornTimeRef = useRef<number>(0);
   const togglePlayPauseRef = useRef<(() => void) | null>(null);
-
-  // Throttled horn function
-  const playThrottledHorn = () => {
-    const now = Date.now();
-    const timeSinceLastHorn = now - lastHornTimeRef.current;
-
-    if (timeSinceLastHorn >= 5000) {
-      // 5 seconds in milliseconds
-      toast.success("Someone sent a horn!");
-      playHorn();
-      lastHornTimeRef.current = now;
-    } else {
-      console.log(
-        `Horn throttled. Try again in ${Math.ceil((5000 - timeSinceLastHorn) / 1000)} seconds.`,
-      );
-    }
-  };
 
   const socket = usePartySocket({
     host: env.NEXT_PUBLIC_PARTYKIT_URL,
@@ -98,10 +78,6 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
         socket.close();
         window.location.replace("/");
         return;
-      }
-
-      if (eventData.type === "horn") {
-        playThrottledHorn();
       }
 
       if (eventData.type === "settings") {

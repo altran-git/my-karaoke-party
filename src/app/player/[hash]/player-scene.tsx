@@ -268,6 +268,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
               <Player
                 key={currentVideo.id}
                 video={currentVideo}
+                nextVideo={nextVideos[1]}
                 joinPartyUrl={joinPartyUrl}
                 isFullscreen={fullscreen}
                 onPlayerEnd={() => {

@@ -110,7 +110,7 @@ export function CreateParty() {
         <Input
           name="code"
           type="text"
-          placeholder="Custom party code (optional), e.g. andy-bday"
+          placeholder="Custom code (optional)"
           value={code}
           onChange={(e) => {
             setCode(e.target.value);

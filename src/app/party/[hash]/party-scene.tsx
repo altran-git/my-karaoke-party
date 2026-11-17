@@ -28,6 +28,8 @@ import {
 import { decode } from "html-entities";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Button } from "~/components/ui/ui/button";
 
 export function PartyScene({
   party,
@@ -43,6 +45,12 @@ export function PartyScene({
   const [playlist, setPlaylist] = useState<KaraokeParty["playlist"]>(
     initialPlaylist?.playlist ?? [],
   );
+
+  // The queued song a guest asked to play now, waiting for them to confirm.
+  const [pendingPlayNow, setPendingPlayNow] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   // What the player screen last reported about the song on screen.
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -142,17 +150,9 @@ export function PartyScene({
   const nextVideo = nextVideos[0] ?? null;
 
   /** Stops the song on screen, drops it from the queue and plays `videoId` now. */
-  const playNow = (videoId: string, title: string) => {
+  const playNow = (videoId: string) => {
     const current = nextVideo;
     if (!current) return;
-
-    if (
-      !window.confirm(
-        `Play "${title}" now?\n\nThis stops "${decode(current.title)}" and removes it from the queue.`,
-      )
-    ) {
-      return;
-    }
 
     const reordered = playNowInQueue(playlist, videoId);
     if (reordered === playlist) return;
@@ -263,7 +263,10 @@ export function PartyScene({
                             title="Play this song now"
                             className="rounded p-2 text-emerald-300 hover:bg-white/20"
                             onClick={() =>
-                              playNow(video.id, decode(video.title))
+                              setPendingPlayNow({
+                                id: video.id,
+                                title: decode(video.title),
+                              })
                             }
                           >
                             <PlayCircle size={20} />
@@ -316,6 +319,40 @@ export function PartyScene({
           </AccordionItem>
         </Accordion>
       </div>
+
+      <Dialog.Root
+        open={!!pendingPlayNow && !!nextVideo}
+        onOpenChange={(open) => {
+          if (!open) setPendingPlayNow(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-5 text-left text-foreground shadow-xl"
+          >
+            <Dialog.Title className="text-base font-normal">
+              Play &ldquo;{pendingPlayNow?.title}&rdquo; now? This stops
+              &ldquo;{nextVideo ? decode(nextVideo.title) : ""}&rdquo; and
+              removes it from the queue.
+            </Dialog.Title>
+            <div className="mt-5 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button variant="outline">Cancel</Button>
+              </Dialog.Close>
+              <Button
+                onClick={() => {
+                  if (pendingPlayNow) playNow(pendingPlayNow.id);
+                  setPendingPlayNow(null);
+                }}
+              >
+                Play now
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   );
 }

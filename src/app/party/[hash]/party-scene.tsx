@@ -333,9 +333,7 @@ export function PartyScene({
             className="fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-5 text-left text-foreground shadow-xl"
           >
             <Dialog.Title className="text-base font-normal">
-              Play &ldquo;{pendingPlayNow?.title}&rdquo; now? This stops
-              &ldquo;{nextVideo ? decode(nextVideo.title) : ""}&rdquo; and
-              removes it from the queue.
+              {`Skip current song and play “${pendingPlayNow?.title ?? ""}”?`}
             </Dialog.Title>
             <div className="mt-5 flex justify-end gap-2">
               <Dialog.Close asChild>

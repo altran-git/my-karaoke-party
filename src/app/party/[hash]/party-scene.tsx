@@ -154,16 +154,25 @@ export function PartyScene({
       return;
     }
 
-    const reordered = playNowInQueue(playlist, videoId, current.id);
+    const reordered = playNowInQueue(playlist, videoId);
     if (reordered === playlist) return;
 
     setPlaylist(reordered);
 
+    // Built from messages the queue server already understands, so it works
+    // without redeploying it: make the song next in line, then finish the
+    // one on screen. The player screen moves on to the new song by itself.
     socket.send(
       JSON.stringify({
-        type: "play-now",
+        type: "move-video",
         id: videoId,
-        currentId: current.id,
+        toIndex: 1,
+      } satisfies Message),
+    );
+    socket.send(
+      JSON.stringify({
+        type: "mark-as-played",
+        id: current.id,
       } satisfies Message),
     );
   };

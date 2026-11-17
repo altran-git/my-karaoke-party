@@ -50,36 +50,28 @@ export function moveInQueue<T extends QueueItem>(
 }
 
 /**
- * Plays `videoId` right away: the song on screen now (the first unplayed one)
- * is taken out of the playlist and `videoId` takes its spot at the front of
- * the queue. The rest of the queue keeps its order.
+ * Plays upcoming video `videoId` right away: it moves to the front of the
+ * queue and the song on screen now is marked as played, which takes it out
+ * of the queue. The rest of the queue keeps its order.
  *
- * Returns the playlist untouched when `videoId` isn't an upcoming song, or
- * when `currentId` is given and is no longer the song on screen (the guest
- * was looking at a stale queue).
+ * Returns the playlist untouched when `videoId` isn't an upcoming song.
  */
 export function playNowInQueue<T extends QueueItem>(
   playlist: T[],
   videoId: string,
-  currentId?: string,
 ) {
-  const currentIndex = playlist.findIndex((video) => !video.playedAt);
-  const current = playlist[currentIndex];
+  const queueIndexes = getQueueIndexes(playlist);
+  const current = playlist[queueIndexes[0]!];
 
   if (!current || current.id === videoId) return playlist;
-  if (currentId !== undefined && current.id !== currentId) return playlist;
 
-  const selectedIndex = playlist.findIndex(
-    (video, i) => i > currentIndex && video.id === videoId && !video.playedAt,
+  const reordered = moveInQueue(playlist, videoId, 1);
+  if (reordered === playlist) {
+    // Already next in line, or not in the queue at all.
+    if (playlist[queueIndexes[1]!]?.id !== videoId) return playlist;
+  }
+
+  return reordered.map((video) =>
+    video === current ? { ...video, playedAt: new Date() } : video,
   );
-
-  if (selectedIndex === -1) return playlist;
-
-  const selected = playlist[selectedIndex]!;
-  const reordered = playlist.filter(
-    (_, i) => i !== currentIndex && i !== selectedIndex,
-  );
-  reordered.splice(currentIndex, 0, selected);
-
-  return reordered;
 }

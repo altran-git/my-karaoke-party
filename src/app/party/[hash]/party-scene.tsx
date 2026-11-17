@@ -14,10 +14,11 @@ import {
   ListMusic,
   Pause,
   Play,
+  PlayCircle,
   X,
 } from "lucide-react";
 import type { PlaybackState } from "party/types";
-import { moveInQueue } from "~/utils/playlist";
+import { moveInQueue, playNowInQueue } from "~/utils/playlist";
 import {
   Accordion,
   AccordionContent,
@@ -27,6 +28,8 @@ import {
 import { decode } from "html-entities";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Button } from "~/components/ui/ui/button";
 
 export function PartyScene({
   party,
@@ -42,6 +45,12 @@ export function PartyScene({
   const [playlist, setPlaylist] = useState<KaraokeParty["playlist"]>(
     initialPlaylist?.playlist ?? [],
   );
+
+  // The queued song a guest asked to play now, waiting for them to confirm.
+  const [pendingPlayNow, setPendingPlayNow] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   // What the player screen last reported about the song on screen.
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
@@ -140,6 +149,34 @@ export function PartyScene({
   const nextVideos = playlist.filter((video) => !video.playedAt);
   const nextVideo = nextVideos[0] ?? null;
 
+  /** Stops the song on screen, drops it from the queue and plays `videoId` now. */
+  const playNow = (videoId: string) => {
+    const current = nextVideo;
+    if (!current) return;
+
+    const reordered = playNowInQueue(playlist, videoId);
+    if (reordered === playlist) return;
+
+    setPlaylist(reordered);
+
+    // Built from messages the queue server already understands, so it works
+    // without redeploying it: make the song next in line, then finish the
+    // one on screen. The player screen moves on to the new song by itself.
+    socket.send(
+      JSON.stringify({
+        type: "move-video",
+        id: videoId,
+        toIndex: 1,
+      } satisfies Message),
+    );
+    socket.send(
+      JSON.stringify({
+        type: "mark-as-played",
+        id: current.id,
+      } satisfies Message),
+    );
+  };
+
   // Only trust the reported state if it is about the song on screen now.
   const knowsPlayback = !!nextVideo && playback?.id === nextVideo.id;
   const isPlaying = knowsPlayback && playback.playing;
@@ -191,7 +228,12 @@ export function PartyScene({
           className="max-h-screen min-w-0 grow"
         >
           <AccordionItem value="item-1" className="border-0">
-            <AccordionTrigger disabled={nextVideos.length < 1}>
+            <AccordionTrigger
+              disabled={nextVideos.length < 1}
+              // The queue opens upward from the bottom bar: point up while
+              // closed (tap to open) and down while open (tap to close).
+              className="[&>svg]:rotate-180 [&[data-state=open]>svg]:rotate-0"
+            >
               <div className="flex min-w-0 flex-row text-left">
                 <ListMusic className="mr-3 shrink-0" />
                 <span className="truncate">
@@ -220,6 +262,20 @@ export function PartyScene({
 
                       {!isPlaying && (
                         <>
+                          <button
+                            type="button"
+                            aria-label="Play now"
+                            title="Play this song now"
+                            className="rounded p-2 text-emerald-300 hover:bg-white/20"
+                            onClick={() =>
+                              setPendingPlayNow({
+                                id: video.id,
+                                title: decode(video.title),
+                              })
+                            }
+                          >
+                            <PlayCircle size={20} />
+                          </button>
                           <button
                             type="button"
                             aria-label="Move up"
@@ -268,6 +324,38 @@ export function PartyScene({
           </AccordionItem>
         </Accordion>
       </div>
+
+      <Dialog.Root
+        open={!!pendingPlayNow && !!nextVideo}
+        onOpenChange={(open) => {
+          if (!open) setPendingPlayNow(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-background p-5 text-left text-foreground shadow-xl"
+          >
+            <Dialog.Title className="text-base font-normal">
+              {`Skip current song and play “${pendingPlayNow?.title ?? ""}”?`}
+            </Dialog.Title>
+            <div className="mt-5 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button variant="outline">Cancel</Button>
+              </Dialog.Close>
+              <Button
+                onClick={() => {
+                  if (pendingPlayNow) playNow(pendingPlayNow.id);
+                  setPendingPlayNow(null);
+                }}
+              >
+                Play now
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   );
 }

@@ -14,10 +14,11 @@ import {
   ListMusic,
   Pause,
   Play,
+  PlayCircle,
   X,
 } from "lucide-react";
 import type { PlaybackState } from "party/types";
-import { moveInQueue } from "~/utils/playlist";
+import { moveInQueue, playNowInQueue } from "~/utils/playlist";
 import {
   Accordion,
   AccordionContent,
@@ -140,6 +141,33 @@ export function PartyScene({
   const nextVideos = playlist.filter((video) => !video.playedAt);
   const nextVideo = nextVideos[0] ?? null;
 
+  /** Stops the song on screen, drops it from the queue and plays `videoId` now. */
+  const playNow = (videoId: string, title: string) => {
+    const current = nextVideo;
+    if (!current) return;
+
+    if (
+      !window.confirm(
+        `Play "${title}" now?\n\nThis stops "${decode(current.title)}" and removes it from the queue.`,
+      )
+    ) {
+      return;
+    }
+
+    const reordered = playNowInQueue(playlist, videoId, current.id);
+    if (reordered === playlist) return;
+
+    setPlaylist(reordered);
+
+    socket.send(
+      JSON.stringify({
+        type: "play-now",
+        id: videoId,
+        currentId: current.id,
+      } satisfies Message),
+    );
+  };
+
   // Only trust the reported state if it is about the song on screen now.
   const knowsPlayback = !!nextVideo && playback?.id === nextVideo.id;
   const isPlaying = knowsPlayback && playback.playing;
@@ -220,6 +248,17 @@ export function PartyScene({
 
                       {!isPlaying && (
                         <>
+                          <button
+                            type="button"
+                            aria-label="Play now"
+                            title="Play this song now"
+                            className="rounded p-2 text-emerald-300 hover:bg-white/20"
+                            onClick={() =>
+                              playNow(video.id, decode(video.title))
+                            }
+                          >
+                            <PlayCircle size={20} />
+                          </button>
                           <button
                             type="button"
                             aria-label="Move up"

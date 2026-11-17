@@ -48,3 +48,38 @@ export function moveInQueue<T extends QueueItem>(
 
   return reordered;
 }
+
+/**
+ * Plays `videoId` right away: the song on screen now (the first unplayed one)
+ * is taken out of the playlist and `videoId` takes its spot at the front of
+ * the queue. The rest of the queue keeps its order.
+ *
+ * Returns the playlist untouched when `videoId` isn't an upcoming song, or
+ * when `currentId` is given and is no longer the song on screen (the guest
+ * was looking at a stale queue).
+ */
+export function playNowInQueue<T extends QueueItem>(
+  playlist: T[],
+  videoId: string,
+  currentId?: string,
+) {
+  const currentIndex = playlist.findIndex((video) => !video.playedAt);
+  const current = playlist[currentIndex];
+
+  if (!current || current.id === videoId) return playlist;
+  if (currentId !== undefined && current.id !== currentId) return playlist;
+
+  const selectedIndex = playlist.findIndex(
+    (video, i) => i > currentIndex && video.id === videoId && !video.playedAt,
+  );
+
+  if (selectedIndex === -1) return playlist;
+
+  const selected = playlist[selectedIndex]!;
+  const reordered = playlist.filter(
+    (_, i) => i !== currentIndex && i !== selectedIndex,
+  );
+  reordered.splice(currentIndex, 0, selected);
+
+  return reordered;
+}

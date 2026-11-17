@@ -5,7 +5,7 @@ import {
 	Server,
 	type WSMessage,
 } from "partyserver";
-import { moveInQueue } from "~/utils/playlist";
+import { moveInQueue, playNowInQueue } from "~/utils/playlist";
 import {
 	type KaraokeParty,
 	Message,
@@ -220,6 +220,30 @@ export class KaraokeServer extends Server<Env> {
 				);
 
 				if (reordered !== this.karaokeParty.playlist) {
+					this.karaokeParty.playlist = reordered;
+
+					await this.savekaraokeParty();
+					this.broadcast(JSON.stringify(reordered));
+				}
+
+				break;
+			}
+
+			case "play-now": {
+				const reordered = playNowInQueue(
+					this.karaokeParty.playlist,
+					data.id,
+					data.currentId,
+				);
+
+				if (reordered !== this.karaokeParty.playlist) {
+					// A new turn starts: everyone who postponed gets a fresh turn.
+					for (const v of reordered) {
+						if (!v.playedAt) {
+							v.postponedAt = null;
+						}
+					}
+
 					this.karaokeParty.playlist = reordered;
 
 					await this.savekaraokeParty();

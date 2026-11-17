@@ -36,6 +36,17 @@ const MoveVideo = z.object({
 	toIndex: z.number().int().nonnegative(),
 });
 
+/**
+ * Stop the song on screen (`currentId`), drop it from the queue and play
+ * upcoming video `id` right away.
+ */
+const PlayNow = z.object({
+	type: z.literal("play-now"),
+	id: z.string(),
+	/** The song the guest saw on screen; ignored if that has changed since. */
+	currentId: z.string().optional(),
+});
+
 /** Where newly requested songs go: "end" of the queue, or "top" (next in line). */
 export const AddSongsTo = z.enum(["end", "top"]);
 
@@ -67,6 +78,7 @@ export const Message = z.union([
 	MarkAsPlayed,
 	PostponeVideo,
 	MoveVideo,
+	PlayNow,
 	SetAddSongsTo,
 	SetPlayback,
 	ReportPlayback,

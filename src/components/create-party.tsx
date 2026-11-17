@@ -92,12 +92,12 @@ export function CreateParty() {
           e.preventDefault();
           createParty.mutate({ name, code: code.trim() || undefined });
         }}
-        className="flex flex-col gap-2"
+        className="flex w-full max-w-xs flex-col gap-2"
       >
         <Input
           name="name"
           type="text"
-          placeholder="My Awesome Party..."
+          placeholder="Party Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           minLength={3}
@@ -110,7 +110,7 @@ export function CreateParty() {
         <Input
           name="code"
           type="text"
-          placeholder="Custom party code (optional), e.g. andy-bday"
+          placeholder="Custom code (optional)"
           value={code}
           onChange={(e) => {
             setCode(e.target.value);
@@ -120,7 +120,7 @@ export function CreateParty() {
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
-          className="font-mono"
+          className="font-mono placeholder:font-sans"
         />
 
         {createParty.error && (

@@ -228,7 +228,12 @@ export function PartyScene({
           className="max-h-screen min-w-0 grow"
         >
           <AccordionItem value="item-1" className="border-0">
-            <AccordionTrigger disabled={nextVideos.length < 1}>
+            <AccordionTrigger
+              disabled={nextVideos.length < 1}
+              // The queue opens upward from the bottom bar: point up while
+              // closed (tap to open) and down while open (tap to close).
+              className="[&>svg]:rotate-180 [&[data-state=open]>svg]:rotate-0"
+            >
               <div className="flex min-w-0 flex-row text-left">
                 <ListMusic className="mr-3 shrink-0" />
                 <span className="truncate">

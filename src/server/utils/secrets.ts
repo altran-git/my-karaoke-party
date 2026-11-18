@@ -16,24 +16,24 @@ export function secretMatches(storedHash: string | null, secret: string) {
 }
 
 /**
- * Checks a party host key. New parties get a recovery code as their key
+ * Checks a party host key. New parties get a host code as their key
  * (stored hashed in its normalized form, so dashes and capitals don't
  * matter); older parties have a random key that must match exactly.
  */
 export function hostKeyMatches(storedHash: string | null, hostKey: string) {
   return (
-    secretMatches(storedHash, normalizeRecoveryCode(hostKey)) ||
+    secretMatches(storedHash, normalizeHostCode(hostKey)) ||
     secretMatches(storedHash, hostKey)
   );
 }
 
 /**
  * The form of a host key that the browser should keep: the formatted
- * recovery code for new parties, or the key exactly as typed for old ones.
+ * host code for new parties, or the key exactly as typed for old ones.
  */
 export function canonicalHostKey(storedHash: string | null, hostKey: string) {
-  return secretMatches(storedHash, normalizeRecoveryCode(hostKey))
-    ? formatRecoveryCode(hostKey)
+  return secretMatches(storedHash, normalizeHostCode(hostKey))
+    ? formatHostCode(hostKey)
     : hostKey.trim();
 }
 
@@ -61,25 +61,25 @@ export async function requirePartyHost(
 }
 
 // Crockford base32: no I, L, O or U, so a code is hard to misread or mistype.
-const RECOVERY_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const RECOVERY_CODE_LENGTH = 20; // 100 bits: far too many to guess.
+const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const CODE_LENGTH = 20; // 100 bits: far too many to guess.
 
-/** A new recovery code like "K7QF-29XM-TR4P-8BWD-3NHA". */
-export function generateRecoveryCode() {
-  const bytes = randomBytes(RECOVERY_CODE_LENGTH);
+/** A new host code like "K7QF-29XM-TR4P-8BWD-3NHA". */
+export function generateHostCode() {
+  const bytes = randomBytes(CODE_LENGTH);
   let code = "";
   for (const byte of bytes) {
     // 256 is a multiple of 32, so every character is equally likely.
-    code += RECOVERY_ALPHABET[byte % 32];
+    code += CODE_ALPHABET[byte % 32];
   }
-  return formatRecoveryCode(code);
+  return formatHostCode(code);
 }
 
 /**
- * Canonical form of a recovery code as typed: capitals, no spaces or dashes,
+ * Canonical form of a host code as typed: capitals, no spaces or dashes,
  * and the letters people confuse with digits read as those digits.
  */
-export function normalizeRecoveryCode(input: string) {
+export function normalizeHostCode(input: string) {
   return input
     .toUpperCase()
     .replace(/[\s-]/g, "")
@@ -87,17 +87,17 @@ export function normalizeRecoveryCode(input: string) {
     .replace(/[IL]/g, "1");
 }
 
-export function formatRecoveryCode(code: string) {
+export function formatHostCode(code: string) {
   return (
-    normalizeRecoveryCode(code)
+    normalizeHostCode(code)
       .match(/.{1,4}/g)
       ?.join("-") ?? ""
   );
 }
 
-/** Hash stored for a recovery code, however it was typed. */
-export function hashRecoveryCode(code: string) {
-  return hashSecret(normalizeRecoveryCode(code));
+/** Hash stored for a host code, however it was typed. */
+export function hashHostCode(code: string) {
+  return hashSecret(normalizeHostCode(code));
 }
 
 const LINK_ALPHABET =

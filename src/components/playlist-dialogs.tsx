@@ -10,11 +10,6 @@ import type { LoadMode } from "party/types";
 import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
 import { rememberParty } from "~/utils/recent-parties";
-import {
-  forgetPlaylist,
-  getSavedPlaylists,
-  rememberPlaylist,
-} from "~/utils/saved-playlists";
 import { getUrl } from "~/utils/url";
 import { Button } from "./ui/ui/button";
 import { Input } from "./ui/ui/input";
@@ -51,41 +46,18 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-/** Link and recovery code of a playlist that was just created. */
-export function NewPlaylistDetails({
-  hash,
-  recoveryCode,
-}: {
-  hash: string;
-  recoveryCode: string;
-}) {
+/** Link of a playlist that was just created. */
+export function NewPlaylistDetails({ hash }: { hash: string }) {
   const url = playlistUrl(hash);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <span className="text-sm text-muted-foreground">
-          Anyone can now find it under Load playlist. This link opens it
-          directly.
-        </span>
-        <div className="flex items-center gap-2">
-          <Input readOnly value={url} className="text-xs font-mono" />
-          <CopyButton text={url} label="Copy link" />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1 rounded-md border border-amber-500/60 bg-amber-500/10 p-3">
-        <span className="text-sm font-semibold">Recovery code</span>
-        <div className="flex items-center gap-2">
-          <span className="text-lg select-all font-mono tracking-wider">
-            {recoveryCode}
-          </span>
-          <CopyButton text={recoveryCode} label="Copy recovery code" />
-        </div>
-        <span className="text-xs text-muted-foreground">
-          Lets you rename the playlist. This browser remembers it; write it down
-          to rename from another browser. It won&apos;t be shown again.
-        </span>
+    <div className="flex flex-col gap-1">
+      <span className="text-sm text-muted-foreground">
+        Anyone can now find it under Load playlist. This link opens it directly.
+      </span>
+      <div className="flex items-center gap-2">
+        <Input readOnly value={url} className="text-xs font-mono" />
+        <CopyButton text={url} label="Copy link" />
       </div>
     </div>
   );
@@ -160,8 +132,7 @@ export function SavePlaylistDialog({
 
   const utils = api.useUtils();
   const save = api.playlist.saveFromParty.useMutation({
-    onSuccess: (playlist) => {
-      rememberPlaylist(playlist);
+    onSuccess: () => {
       void utils.playlist.list.invalidate();
     },
   });
@@ -192,10 +163,7 @@ export function SavePlaylistDialog({
                   save.data.songCount === 1 ? "song" : "songs"
                 }.`}
               </p>
-              <NewPlaylistDetails
-                hash={save.data.hash}
-                recoveryCode={save.data.recoveryCode}
-              />
+              <NewPlaylistDetails hash={save.data.hash} />
               <div className="mt-5 flex justify-end gap-2">
                 <Button variant="outline" asChild>
                   <Link href={`/playlists/${save.data.hash}`} target="_blank">
@@ -307,7 +275,6 @@ export function DeletePlaylistDialog({
 
   const remove = api.playlist.delete.useMutation({
     onSuccess: (_data, { hash }) => {
-      forgetPlaylist(hash);
       void utils.playlist.list.invalidate();
       toast.success("Playlist deleted.");
       onOpenChange(false);
@@ -405,20 +372,8 @@ export function LoadPlaylistDialog({
     hash: string;
     name: string;
   } | null>(null);
-  // Playlists this browser created or unlocked, to mark them as yours.
-  const [ownHashes, setOwnHashes] = useState<Set<string>>(new Set());
-
   useEffect(() => {
-    if (open) {
-      setSearch("");
-      setOwnHashes(
-        new Set(
-          getSavedPlaylists()
-            .filter((p) => p.recoveryCode)
-            .map((p) => p.hash),
-        ),
-      );
-    }
+    if (open) setSearch("");
   }, [open]);
 
   const list = api.playlist.list.useInfiniteQuery(
@@ -500,7 +455,6 @@ export function LoadPlaylistDialog({
                     </Link>
                     <span className="text-xs text-muted-foreground">
                       {p.songCount} {p.songCount === 1 ? "song" : "songs"}
-                      {ownHashes.has(p.hash) ? " · yours" : ""}
                     </span>
                   </div>
                   <Button

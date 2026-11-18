@@ -10,7 +10,6 @@ import {
   getRecentParties,
   type RecentParty,
 } from "~/utils/recent-parties";
-import { rememberPlaylist } from "~/utils/saved-playlists";
 import { playlistUrl } from "./playlist-dialogs";
 import { Input } from "./ui/ui/input";
 import { Button } from "./ui/ui/button";
@@ -64,15 +63,12 @@ export function ExistingParties() {
           partyHash: p.hash,
           name: `${p.name} ${new Date().toLocaleDateString()}`,
         });
-        rememberPlaylist(playlist);
-        // A prompt, so the code can be selected and copied.
+        // A prompt, so the link can be selected and copied.
         window.prompt(
           `Saved "${playlist.name}" (${playlist.songCount} ` +
-            `${playlist.songCount === 1 ? "song" : "songs"}) at ` +
-            `${playlistUrl(playlist.hash)}\n\n` +
-            "This browser remembers it. To rename it from another " +
-            "browser, keep this recovery code:",
-          playlist.recoveryCode,
+            `${playlist.songCount === 1 ? "song" : "songs"}). ` +
+            "It's under Load playlist, and at this link:",
+          playlistUrl(playlist.hash),
         );
       } catch (err) {
         const code =

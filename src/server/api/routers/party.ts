@@ -6,8 +6,8 @@ import { fetchPartyServer } from "~/server/party-server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import {
   canonicalHostKey,
-  generateRecoveryCode,
-  hashRecoveryCode,
+  generateHostCode,
+  hashHostCode,
   hostKeyMatches,
 } from "~/server/utils/secrets";
 import { normalizeCustomCode, validateCustomCode } from "~/server/utils/sqids";
@@ -52,17 +52,17 @@ export const partyRouter = createTRPCRouter({
       }
 
       // Only the browser that creates the party gets this key, which proves
-      // the host (to load playlists or delete the party). It's a recovery
+      // the host (to load playlists or delete the party). It's a host
       // code the host can write down and type into another browser. The
       // database keeps just its hash.
-      const hostKey = generateRecoveryCode();
+      const hostKey = generateHostCode();
 
       let party;
       try {
         party = await ctx.db.party.createWithHash({
           name: input.name,
           hash: customCode,
-          hostKeyHash: hashRecoveryCode(hostKey),
+          hostKeyHash: hashHostCode(hostKey),
         });
       } catch (e) {
         // Someone else took the same code between the check and the insert.

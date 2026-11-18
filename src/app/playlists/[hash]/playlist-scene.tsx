@@ -1,7 +1,7 @@
 "use client";
 
 import { decode } from "html-entities";
-import { Check, Copy, KeyRound, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,7 +18,6 @@ import { Input } from "~/components/ui/ui/input";
 import type { RouterOutputs } from "~/trpc/react";
 import { api } from "~/trpc/react";
 import { getRecentParties, type RecentParty } from "~/utils/recent-parties";
-import { getSavedPlaylist, rememberPlaylist } from "~/utils/saved-playlists";
 
 type Playlist = NonNullable<RouterOutputs["playlist"]["get"]>;
 
@@ -26,7 +25,6 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
   const router = useRouter();
 
   const [name, setName] = useState(playlist.name);
-  const [recoveryCode, setRecoveryCode] = useState<string | undefined>();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Parties this browser hosts (has the key for), to load the songs into.
@@ -37,15 +35,10 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
 
   // localStorage is only readable in the browser, after hydration.
   useEffect(() => {
-    // Opening the link adds the playlist to this browser's list, so the
-    // player screen's "Load playlist" offers it.
-    rememberPlaylist({ hash: playlist.hash, name: playlist.name });
-    setRecoveryCode(getSavedPlaylist(playlist.hash)?.recoveryCode);
-
     const hosted = getRecentParties().filter((p) => p.hostKey);
     setParties(hosted);
     setPartyHash(hosted[0]?.hash ?? "");
-  }, [playlist.hash, playlist.name]);
+  }, []);
 
   const load = api.playlist.loadIntoParty.useMutation({
     onSuccess: ({ added, skipped }) => {
@@ -178,31 +171,12 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
         )}
       </section>
 
-      {recoveryCode ? (
-        <OwnerPanel
-          hash={playlist.hash}
-          name={name}
-          recoveryCode={recoveryCode}
-          onRenamed={setName}
-        />
-      ) : (
-        <UnlockPanel
-          hash={playlist.hash}
-          onUnlocked={(code) => {
-            rememberPlaylist({ hash: playlist.hash, name, recoveryCode: code });
-            setRecoveryCode(code);
-          }}
-        />
-      )}
-
-      <Button
-        variant="destructive"
-        className="self-start"
-        onClick={() => setDeleteOpen(true)}
-      >
-        <Trash2 className="mr-2 h-4 w-4" />
-        Delete playlist
-      </Button>
+      <ManagePanel
+        hash={playlist.hash}
+        name={name}
+        onRenamed={setName}
+        onDelete={() => setDeleteOpen(true)}
+      />
       <DeletePlaylistDialog
         playlist={deleteOpen ? { hash: playlist.hash, name } : null}
         onOpenChange={setDeleteOpen}
@@ -235,27 +209,23 @@ function CopyLinkButton({ url }: { url: string }) {
   );
 }
 
-/** Renaming, for a browser that holds the recovery code. */
-function OwnerPanel({
+/** Rename and delete. Anyone can do both. */
+function ManagePanel({
   hash,
   name,
-  recoveryCode,
   onRenamed,
+  onDelete,
 }: {
   hash: string;
   name: string;
-  recoveryCode: string;
   onRenamed: (name: string) => void;
+  onDelete: () => void;
 }) {
   const [newName, setNewName] = useState(name);
-  const [showCode, setShowCode] = useState(false);
 
   const update = api.playlist.update.useMutation({
     onSuccess: (_data, { name }) => {
-      if (name) {
-        onRenamed(name);
-        rememberPlaylist({ hash, name });
-      }
+      if (name) onRenamed(name);
       toast.success("Playlist renamed.");
     },
     onError: (err) => toast.error(err.message),
@@ -263,13 +233,13 @@ function OwnerPanel({
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
-      <h2 className="text-lg font-bold">You own this playlist</h2>
+      <h2 className="text-lg font-bold">Manage playlist</h2>
 
       <form
         className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          update.mutate({ hash, recoveryCode, name: newName });
+          update.mutate({ hash, name: newName });
         }}
       >
         <Input
@@ -290,95 +260,10 @@ function OwnerPanel({
         </Button>
       </form>
 
-      <div className="text-sm">
-        {showCode ? (
-          <span>
-            Recovery code:{" "}
-            <span className="select-all font-mono tracking-wider">
-              {recoveryCode}
-            </span>
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="underline-offset-4 hover:underline"
-            onClick={() => setShowCode(true)}
-          >
-            Show recovery code
-          </button>
-        )}
-      </div>
+      <Button variant="destructive" className="self-start" onClick={onDelete}>
+        <Trash2 className="mr-2 h-4 w-4" />
+        Delete playlist
+      </Button>
     </section>
-  );
-}
-
-/** Lets the owner unlock editing in a new browser with the recovery code. */
-function UnlockPanel({
-  hash,
-  onUnlocked,
-}: {
-  hash: string;
-  onUnlocked: (recoveryCode: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [code, setCode] = useState("");
-
-  const verify = api.playlist.verifyOwner.useMutation({
-    onSuccess: ({ recoveryCode }) => {
-      toast.success("Playlist unlocked in this browser.");
-      onUnlocked(recoveryCode);
-    },
-  });
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className="flex items-center gap-2 self-start text-sm underline-offset-4 opacity-80 hover:underline"
-        onClick={() => setOpen(true)}
-      >
-        <KeyRound className="h-4 w-4" />
-        Is this your playlist? Enter its recovery code to rename it
-      </button>
-    );
-  }
-
-  return (
-    <form
-      className="flex flex-col gap-1 rounded-lg border border-white/20 bg-black/30 p-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        verify.mutate({ hash, recoveryCode: code });
-      }}
-    >
-      <label htmlFor="recovery-code" className="text-sm">
-        Recovery code
-      </label>
-      <div className="flex gap-2">
-        <Input
-          id="recovery-code"
-          value={code}
-          onChange={(e) => {
-            setCode(e.target.value);
-            verify.reset();
-          }}
-          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
-          autoComplete="off"
-          autoCapitalize="characters"
-          spellCheck={false}
-          className="font-mono"
-        />
-        <Button
-          type="submit"
-          variant="secondary"
-          disabled={verify.isPending || !code.trim()}
-        >
-          Unlock
-        </Button>
-      </div>
-      {verify.error && (
-        <p className="text-sm text-red-300">{verify.error.message}</p>
-      )}
-    </form>
   );
 }

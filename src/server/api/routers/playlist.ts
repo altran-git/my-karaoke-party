@@ -13,15 +13,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import type { db as Db } from "~/server/db";
 import { fetchPartyServer } from "~/server/party-server";
-import {
-  formatRecoveryCode,
-  generatePlaylistHash,
-  generateRecoveryCode,
-  hashRecoveryCode,
-  normalizeRecoveryCode,
-  requirePartyHost,
-  secretMatches,
-} from "~/server/utils/secrets";
+import { generatePlaylistHash, requirePartyHost } from "~/server/utils/secrets";
 
 /** Every song loaded from a playlist is sung by the host. */
 const LOADED_SINGER_NAME = "Host";
@@ -30,8 +22,6 @@ const PlaylistName = z.string().trim().min(1).max(100);
 const Songs = z.array(PlaylistSongInput).max(MAX_PLAYLIST_SONGS);
 const Hash = z.string().min(1).max(100);
 const Secret = z.string().min(1).max(200);
-
-const WRONG_CODE_MESSAGE = "That recovery code doesn't match this playlist.";
 
 function toSongRows(songs: PlaylistSongInput[]) {
   return songs.map((song, position) => ({
@@ -43,13 +33,11 @@ function toSongRows(songs: PlaylistSongInput[]) {
   }));
 }
 
-/** Creates a playlist with a fresh link and recovery code. */
+/** Creates a playlist with a fresh random link. */
 async function createPlaylist(
   db: typeof Db,
   data: { name: string; songs: PlaylistSongInput[]; sourceParty?: string },
 ) {
-  const recoveryCode = generateRecoveryCode();
-
   // The hash is random, so a clash is all but impossible; retry just in case.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -57,7 +45,6 @@ async function createPlaylist(
         data: {
           hash: generatePlaylistHash(),
           name: data.name,
-          ownerKeyHash: hashRecoveryCode(recoveryCode),
           sourceParty: data.sourceParty,
           songs: { create: toSongRows(data.songs) },
         },
@@ -67,7 +54,6 @@ async function createPlaylist(
         hash: playlist.hash,
         name: playlist.name,
         songCount: data.songs.length,
-        recoveryCode,
       };
     } catch (e) {
       if (
@@ -81,27 +67,6 @@ async function createPlaylist(
   }
 
   throw new Error("Couldn't pick a unique playlist link");
-}
-
-async function requirePlaylistOwner(
-  db: typeof Db,
-  hash: string,
-  recoveryCode: string,
-) {
-  const playlist = await db.playlist.findUnique({ where: { hash } });
-
-  if (!playlist) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Playlist not found." });
-  }
-
-  // Compared after normalizing, so dashes and lowercase don't matter.
-  if (
-    !secretMatches(playlist.ownerKeyHash, normalizeRecoveryCode(recoveryCode))
-  ) {
-    throw new TRPCError({ code: "FORBIDDEN", message: WRONG_CODE_MESSAGE });
-  }
-
-  return playlist;
 }
 
 export const playlistRouter = createTRPCRouter({
@@ -208,33 +173,25 @@ export const playlistRouter = createTRPCRouter({
       return created;
     }),
 
-  /**
-   * Checks a recovery code. Returns it in its canonical form, which the
-   * browser keeps to edit the playlist later.
-   */
-  verifyOwner: publicProcedure
-    .input(z.object({ hash: Hash, recoveryCode: Secret }))
-    .mutation(async ({ ctx, input }) => {
-      await requirePlaylistOwner(ctx.db, input.hash, input.recoveryCode);
-      return { recoveryCode: formatRecoveryCode(input.recoveryCode) };
-    }),
-
-  /** Renames the playlist and/or replaces its songs. */
+  /** Renames the playlist and/or replaces its songs. Anyone can do this. */
   update: publicProcedure
     .input(
       z.object({
         hash: Hash,
-        recoveryCode: Secret,
         name: PlaylistName.optional(),
         songs: Songs.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const playlist = await requirePlaylistOwner(
-        ctx.db,
-        input.hash,
-        input.recoveryCode,
-      );
+      const playlist = await ctx.db.playlist.findUnique({
+        where: { hash: input.hash },
+      });
+      if (!playlist) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Playlist not found.",
+        });
+      }
 
       await ctx.db.$transaction(async (tx) => {
         if (input.songs) {
@@ -284,7 +241,7 @@ export const playlistRouter = createTRPCRouter({
 
   /**
    * Saves a party's songs (sung, queued or both) as a new playlist. Open to
-   * anyone with the party code; whoever saves owns the new playlist.
+   * anyone with the party code.
    */
   saveFromParty: publicProcedure
     .input(

@@ -36,8 +36,11 @@ import { moveInQueue } from "~/utils/playlist";
 import { getUrl } from "~/utils/url";
 import { forgetParty, getHostKey, rememberParty } from "~/utils/recent-parties";
 import {
+  HostCodeDialog,
   LoadPlaylistDialog,
+  NewPartyHostCodeDialog,
   SavePlaylistDialog,
+  UnlockHostDialog,
 } from "~/components/playlist-dialogs";
 
 type Props = {
@@ -59,18 +62,32 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Only the browser that created the party has its key, and with it the
-  // playlist buttons.
+  // The host key proves this browser hosts the party, which loading a
+  // playlist needs. The browser that created the party has it; any other
+  // browser gets it by typing the host code.
   const [hostKey, setHostKey] = useState<string | undefined>();
   const [saveOpen, setSaveOpen] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [hostCodeOpen, setHostCodeOpen] = useState(false);
+  const [newPartyOpen, setNewPartyOpen] = useState(false);
 
   // Remember this party in this browser so the host can come back to it from
   // the start page.
   useEffect(() => {
     if (party.hash) {
       rememberParty({ hash: party.hash, name: party.name });
-      setHostKey(getHostKey(party.hash));
+      const key = getHostKey(party.hash);
+      setHostKey(key);
+
+      // Just created (see create-party.tsx): show the host code once, then
+      // drop the marker so a reload doesn't show it again.
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("created")) {
+        if (key) setNewPartyOpen(true);
+        url.searchParams.delete("created");
+        window.history.replaceState(null, "", url.pathname + url.search);
+      }
     }
   }, [party.hash, party.name]);
 
@@ -252,13 +269,15 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
               {party.hash}
             </span>
           </p>
-          {hostKey && party.hash && (
+          {party.hash && (
             <>
               <div className="mt-3 flex justify-center gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => setLoadOpen(true)}
+                  onClick={() =>
+                    hostKey ? setLoadOpen(true) : setUnlockOpen(true)
+                  }
                 >
                   <ListMusic className="mr-2 h-4 w-4" />
                   Load playlist
@@ -273,17 +292,50 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                   Save as playlist
                 </Button>
               </div>
-              <LoadPlaylistDialog
-                open={loadOpen}
-                onOpenChange={setLoadOpen}
+              {hostKey && (
+                <button
+                  type="button"
+                  className="text-xs mt-2 text-slate-300 underline-offset-4 hover:underline"
+                  onClick={() => setHostCodeOpen(true)}
+                >
+                  Host code
+                </button>
+              )}
+              {hostKey && (
+                <>
+                  <LoadPlaylistDialog
+                    open={loadOpen}
+                    onOpenChange={setLoadOpen}
+                    partyHash={party.hash}
+                    hostKey={hostKey}
+                  />
+                  <HostCodeDialog
+                    open={hostCodeOpen}
+                    onOpenChange={setHostCodeOpen}
+                    hostKey={hostKey}
+                  />
+                  <NewPartyHostCodeDialog
+                    open={newPartyOpen}
+                    onOpenChange={setNewPartyOpen}
+                    hostKey={hostKey}
+                  />
+                </>
+              )}
+              <UnlockHostDialog
+                open={unlockOpen}
+                onOpenChange={setUnlockOpen}
                 partyHash={party.hash}
-                hostKey={hostKey}
+                partyName={party.name}
+                onUnlocked={(key) => {
+                  setHostKey(key);
+                  setUnlockOpen(false);
+                  setLoadOpen(true);
+                }}
               />
               <SavePlaylistDialog
                 open={saveOpen}
                 onOpenChange={setSaveOpen}
                 partyHash={party.hash}
-                hostKey={hostKey}
                 defaultName={`${party.name} ${new Date().toLocaleDateString()}`}
               />
             </>

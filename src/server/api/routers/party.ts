@@ -1,15 +1,16 @@
-import { randomBytes } from "node:crypto";
 import { type Party, Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { log } from "next-axiom";
 import { z } from "zod";
 import { fetchPartyServer } from "~/server/party-server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { hashSecret, secretMatches } from "~/server/utils/secrets";
 import {
-  normalizeCustomCode,
-  validateCustomCode,
-} from "~/server/utils/sqids";
+  canonicalHostKey,
+  generateRecoveryCode,
+  hashRecoveryCode,
+  hostKeyMatches,
+} from "~/server/utils/secrets";
+import { normalizeCustomCode, validateCustomCode } from "~/server/utils/sqids";
 
 /** The party without its host key hash, safe to send to any browser. */
 function toPublicParty({ hostKeyHash: _hostKeyHash, ...party }: Party) {
@@ -43,20 +44,25 @@ export const partyRouter = createTRPCRouter({
           where: { hash: customCode },
         });
         if (existing) {
-          throw new TRPCError({ code: "CONFLICT", message: CODE_IN_USE_MESSAGE });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: CODE_IN_USE_MESSAGE,
+          });
         }
       }
 
-      // Only the browser that creates the party gets this key, which it needs
-      // to delete the party later. The database keeps just its hash.
-      const hostKey = randomBytes(32).toString("base64url");
+      // Only the browser that creates the party gets this key, which proves
+      // the host (to load playlists or delete the party). It's a recovery
+      // code the host can write down and type into another browser. The
+      // database keeps just its hash.
+      const hostKey = generateRecoveryCode();
 
       let party;
       try {
         party = await ctx.db.party.createWithHash({
           name: input.name,
           hash: customCode,
-          hostKeyHash: hashSecret(hostKey),
+          hostKeyHash: hashRecoveryCode(hostKey),
         });
       } catch (e) {
         // Someone else took the same code between the check and the insert.
@@ -64,7 +70,10 @@ export const partyRouter = createTRPCRouter({
           e instanceof Prisma.PrismaClientKnownRequestError &&
           e.code === "P2002"
         ) {
-          throw new TRPCError({ code: "CONFLICT", message: CODE_IN_USE_MESSAGE });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: CODE_IN_USE_MESSAGE,
+          });
         }
         throw e;
       }
@@ -99,7 +108,7 @@ export const partyRouter = createTRPCRouter({
         return { deleted: true };
       }
 
-      if (!secretMatches(party.hostKeyHash, input.hostKey)) {
+      if (!hostKeyMatches(party.hostKeyHash, input.hostKey)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Only the browser that started this party can delete it.",
@@ -124,6 +133,40 @@ export const partyRouter = createTRPCRouter({
 
       log.info("Party deleted", { hash: party.hash });
       return { deleted: true };
+    }),
+
+  /**
+   * Checks a host code typed into another browser. Returns the key in the
+   * form that browser should keep.
+   */
+  verifyHost: publicProcedure
+    .input(z.object({ hash: z.string(), hostKey: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const party = await ctx.db.party.findUnique({
+        where: { hash: input.hash },
+      });
+
+      if (!party) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
+      }
+
+      if (!party.hostKeyHash) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "This party was created before host codes existed, so it can " +
+            "only be hosted from the browser that created it.",
+        });
+      }
+
+      if (!hostKeyMatches(party.hostKeyHash, input.hostKey)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "That host code doesn't match this party.",
+        });
+      }
+
+      return { hostKey: canonicalHostKey(party.hostKeyHash, input.hostKey) };
     }),
 
   getByHash: publicProcedure

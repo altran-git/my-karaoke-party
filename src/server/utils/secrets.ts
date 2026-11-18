@@ -16,6 +16,28 @@ export function secretMatches(storedHash: string | null, secret: string) {
 }
 
 /**
+ * Checks a party host key. New parties get a recovery code as their key
+ * (stored hashed in its normalized form, so dashes and capitals don't
+ * matter); older parties have a random key that must match exactly.
+ */
+export function hostKeyMatches(storedHash: string | null, hostKey: string) {
+  return (
+    secretMatches(storedHash, normalizeRecoveryCode(hostKey)) ||
+    secretMatches(storedHash, hostKey)
+  );
+}
+
+/**
+ * The form of a host key that the browser should keep: the formatted
+ * recovery code for new parties, or the key exactly as typed for old ones.
+ */
+export function canonicalHostKey(storedHash: string | null, hostKey: string) {
+  return secretMatches(storedHash, normalizeRecoveryCode(hostKey))
+    ? formatRecoveryCode(hostKey)
+    : hostKey.trim();
+}
+
+/**
  * Loads the party and checks that `hostKey` is the key its creator got.
  * Throws NOT_FOUND or FORBIDDEN otherwise.
  */
@@ -31,7 +53,7 @@ export async function requirePartyHost(
     throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
   }
 
-  if (!secretMatches(party.hostKeyHash, hostKey)) {
+  if (!hostKeyMatches(party.hostKeyHash, hostKey)) {
     throw new TRPCError({ code: "FORBIDDEN", message: forbiddenMessage });
   }
 

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { LoadMode } from "party/types";
 import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
+import { rememberParty } from "~/utils/recent-parties";
 import {
   getSavedPlaylists,
   rememberPlaylist,
@@ -158,9 +159,8 @@ export function SavePlaylistDialog({
   open,
   onOpenChange,
   partyHash,
-  hostKey,
   defaultName,
-}: PartyHostProps & { defaultName: string }) {
+}: Omit<PartyHostProps, "hostKey"> & { defaultName: string }) {
   const [name, setName] = useState(defaultName);
   const [includePlayed, setIncludePlayed] = useState(true);
   const [includeQueued, setIncludeQueued] = useState(true);
@@ -218,7 +218,6 @@ export function SavePlaylistDialog({
                 e.preventDefault();
                 save.mutate({
                   partyHash,
-                  hostKey,
                   name,
                   includePlayed,
                   includeQueued,
@@ -460,6 +459,183 @@ export function LoadPlaylistDialog({
           <div className="mt-5 flex justify-end">
             <Dialog.Close asChild>
               <Button variant="outline">Close</Button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+/** A party's host code, with a copy button. */
+export function HostCodeBox({ hostKey }: { hostKey: string }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-amber-500/60 bg-amber-500/10 p-3">
+      <span className="text-sm font-semibold">Host code</span>
+      <div className="flex items-center gap-2">
+        <span className="text-lg select-all break-all font-mono tracking-wider">
+          {hostKey}
+        </span>
+        <CopyButton text={hostKey} label="Copy host code" />
+      </div>
+      <span className="text-xs text-muted-foreground">
+        This browser remembers it. Write it down to load playlists or delete the
+        party from another browser or device. Don&apos;t share it with guests.
+      </span>
+    </div>
+  );
+}
+
+/** Shown once, right after the party is created. */
+export function NewPartyHostCodeDialog({
+  open,
+  onOpenChange,
+  hostKey,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hostKey: string;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
+        <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
+          <Dialog.Title className="text-lg mb-4 font-semibold">
+            Your party is ready
+          </Dialog.Title>
+          <HostCodeBox hostKey={hostKey} />
+          <p className="text-xs mt-3 text-muted-foreground">
+            You can see this code again with &ldquo;Host code&rdquo; under the
+            party code.
+          </p>
+          <div className="mt-5 flex justify-end">
+            <Dialog.Close asChild>
+              <Button>Got it</Button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+/**
+ * Asks for the party's host code in a browser that doesn't have it, and
+ * remembers it there once the server accepts it.
+ */
+export function UnlockHostDialog({
+  open,
+  onOpenChange,
+  partyHash,
+  partyName,
+  onUnlocked,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  partyHash: string;
+  partyName: string;
+  onUnlocked: (hostKey: string) => void;
+}) {
+  const [code, setCode] = useState("");
+
+  const verify = api.party.verifyHost.useMutation({
+    onSuccess: ({ hostKey }) => {
+      rememberParty({ hash: partyHash, name: partyName, hostKey });
+      onUnlocked(hostKey);
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      setCode("");
+      verify.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
+        <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
+          <Dialog.Title className="text-lg mb-2 font-semibold">
+            Enter the host code
+          </Dialog.Title>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Only the host can load playlists into this party. The host code was
+            shown when the party was created, and under &ldquo;Host code&rdquo;
+            in the browser that created it.
+          </p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              verify.mutate({ hash: partyHash, hostKey: code });
+            }}
+            className="flex flex-col gap-1"
+          >
+            <label htmlFor="host-code" className="text-sm">
+              Host code
+            </label>
+            <div className="flex gap-2">
+              <Input
+                id="host-code"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  verify.reset();
+                }}
+                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                className="font-mono"
+              />
+              <Button type="submit" disabled={verify.isPending || !code.trim()}>
+                {verify.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Unlock"
+                )}
+              </Button>
+            </div>
+            {verify.error && (
+              <p className="text-sm text-red-400">{verify.error.message}</p>
+            )}
+          </form>
+          <div className="mt-5 flex justify-end">
+            <Dialog.Close asChild>
+              <Button variant="outline">Cancel</Button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+/** Shows this browser's host code again. */
+export function HostCodeDialog({
+  open,
+  onOpenChange,
+  hostKey,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hostKey: string;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
+        <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
+          <Dialog.Title className="text-lg mb-4 font-semibold">
+            Host code
+          </Dialog.Title>
+          <HostCodeBox hostKey={hostKey} />
+          <div className="mt-5 flex justify-end">
+            <Dialog.Close asChild>
+              <Button>Close</Button>
             </Dialog.Close>
           </div>
         </Dialog.Content>

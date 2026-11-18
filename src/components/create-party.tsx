@@ -44,7 +44,8 @@ export function CreateParty() {
 
       // Redirect to the party page
       setTimeout(() => {
-        router.push(`/player/${party.hash}`);
+        // "created" makes the player screen show the host code once.
+        router.push(`/player/${party.hash}?created=1`);
       }, 1000);
     },
   });

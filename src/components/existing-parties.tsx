@@ -62,7 +62,6 @@ export function ExistingParties() {
       try {
         const playlist = await savePlaylist.mutateAsync({
           partyHash: p.hash,
-          hostKey: p.hostKey,
           name: `${p.name} ${new Date().toLocaleDateString()}`,
         });
         rememberPlaylist(playlist);

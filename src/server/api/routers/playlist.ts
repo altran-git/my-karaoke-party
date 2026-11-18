@@ -228,13 +228,15 @@ export const playlistRouter = createTRPCRouter({
       return { deleted: true };
     }),
 
-  /** Saves the songs played so far at a party as a new playlist. */
+  /**
+   * Saves a party's songs (sung, queued or both) as a new playlist. Open to
+   * anyone with the party code; whoever saves owns the new playlist.
+   */
   saveFromParty: publicProcedure
     .input(
       z
         .object({
           partyHash: Hash,
-          hostKey: Secret,
           name: PlaylistName,
           /** Songs already sung, in the order they were played. */
           includePlayed: z.boolean().default(true),
@@ -246,12 +248,15 @@ export const playlistRouter = createTRPCRouter({
         }),
     )
     .mutation(async ({ ctx, input }) => {
-      const party = await requirePartyHost(
-        ctx.db,
-        input.partyHash,
-        input.hostKey,
-        "Only the browser that started this party can save its songs.",
-      );
+      // Anyone at the party can save its songs: they can already see them,
+      // and saving only copies them into a new playlist of their own.
+      const found = await ctx.db.party.findUnique({
+        where: { hash: input.partyHash },
+      });
+      if (!found?.hash) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
+      }
+      const party = { hash: found.hash };
 
       const res = await fetchPartyServer(party.hash, {
         method: "GET",

@@ -133,13 +133,13 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
           </>
         ) : (
           <p className="text-sm opacity-80">
-            You need to be hosting a party in this browser.{" "}
+            No party is hosted in this browser yet.{" "}
             <Link href="/" className="underline">
               Start a party
-            </Link>
-            , then come back to this link, or use{" "}
-            <span className="font-semibold">Load playlist</span> on the player
-            screen.
+            </Link>{" "}
+            and come back to this link, or open your party&apos;s player screen
+            and use <span className="font-semibold">Load playlist</span>. It
+            asks for the host code if this browser didn&apos;t create the party.
           </p>
         )}
       </section>

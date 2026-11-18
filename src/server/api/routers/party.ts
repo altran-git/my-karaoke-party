@@ -24,7 +24,8 @@ export const partyRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(3),
-        code: z.string().max(100).optional(),
+        /** The party code guests join with and the host rejoins with. */
+        code: z.string().trim().min(1, "Choose a party code.").max(100),
         /** Proves the host (to load playlists or delete the party). */
         pin: z.string().regex(/^\d{4}$/, "The PIN must be 4 digits."),
       }),
@@ -32,24 +33,21 @@ export const partyRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       log.info("Creating party", { name: input.name });
 
-      let customCode: string | undefined;
-      if (input.code?.trim()) {
-        customCode = normalizeCustomCode(input.code);
+      const customCode = normalizeCustomCode(input.code);
 
-        const invalid = validateCustomCode(customCode);
-        if (invalid) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: invalid });
-        }
+      const invalid = validateCustomCode(customCode);
+      if (invalid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: invalid });
+      }
 
-        const existing = await ctx.db.party.findUnique({
-          where: { hash: customCode },
+      const existing = await ctx.db.party.findUnique({
+        where: { hash: customCode },
+      });
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: CODE_IN_USE_MESSAGE,
         });
-        if (existing) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: CODE_IN_USE_MESSAGE,
-          });
-        }
       }
 
       // The host's PIN proves the host (to load playlists or delete the

@@ -91,7 +91,7 @@ export function CreateParty() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          createParty.mutate({ name, code: code.trim() || undefined, pin });
+          createParty.mutate({ name, code: code.trim(), pin });
         }}
         className="flex w-full max-w-xs flex-col gap-2"
       >
@@ -111,13 +111,16 @@ export function CreateParty() {
         <Input
           name="code"
           type="text"
-          placeholder="Custom code (optional)"
+          placeholder="Party code (used for rejoining)"
+          title="3 to 30 letters, numbers or dashes. Guests join with it, and you use it to rejoin the party."
           value={code}
           onChange={(e) => {
             setCode(e.target.value);
             if (createParty.isError) createParty.reset();
           }}
+          minLength={3}
           maxLength={30}
+          required
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}

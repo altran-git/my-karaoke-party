@@ -45,9 +45,18 @@ import {
 type Props = {
   party: Omit<Party, "hostKeyHash">;
   initialPlaylist: KaraokeParty;
+  /**
+   * True when the host reopened this party from "Rejoin a party": the song
+   * on screen then waits for the host to press play instead of starting.
+   */
+  rejoined?: boolean;
 };
 
-export default function PlayerScene({ party, initialPlaylist }: Props) {
+export default function PlayerScene({
+  party,
+  initialPlaylist,
+  rejoined = false,
+}: Props) {
   const [playlist, setPlaylist] = useState<KaraokeParty["playlist"]>(
     initialPlaylist.playlist ?? [],
   );
@@ -128,6 +137,14 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   const currentVideo = playlist.find((video) => !video.playedAt);
   const nextVideos = playlist.filter((video) => !video.playedAt);
   currentVideoIdRef.current = currentVideo?.id ?? null;
+
+  // On rejoin, the song that was on screen when the page opened waits for
+  // play. Songs after it start on their own as usual.
+  const [rejoinVideoId] = useState<string | null>(() =>
+    rejoined
+      ? (initialPlaylist.playlist?.find((v) => !v.playedAt)?.id ?? null)
+      : null,
+  );
 
   const addSong = (videoId: string, title: string, coverUrl: string) => {
     const singerName = readLocalStorageValue({
@@ -345,7 +362,11 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
             {currentVideo ? (
               <Player
                 key={currentVideo.id}
-                video={currentVideo}
+                video={
+                  currentVideo.id === rejoinVideoId
+                    ? { ...currentVideo, waitForPlay: true }
+                    : currentVideo
+                }
                 nextVideo={nextVideos[1]}
                 joinPartyUrl={joinPartyUrl}
                 isFullscreen={fullscreen}

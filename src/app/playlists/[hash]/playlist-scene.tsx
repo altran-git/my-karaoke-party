@@ -8,17 +8,17 @@ import { useRouter } from "next/navigation";
 import type { LoadMode } from "party/types";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { LoadOptions, playlistUrl } from "~/components/playlist-dialogs";
+import {
+  DeletePlaylistDialog,
+  LoadOptions,
+  playlistUrl,
+} from "~/components/playlist-dialogs";
 import { Button } from "~/components/ui/ui/button";
 import { Input } from "~/components/ui/ui/input";
 import type { RouterOutputs } from "~/trpc/react";
 import { api } from "~/trpc/react";
 import { getRecentParties, type RecentParty } from "~/utils/recent-parties";
-import {
-  forgetPlaylist,
-  getSavedPlaylist,
-  rememberPlaylist,
-} from "~/utils/saved-playlists";
+import { getSavedPlaylist, rememberPlaylist } from "~/utils/saved-playlists";
 
 type Playlist = NonNullable<RouterOutputs["playlist"]["get"]>;
 
@@ -27,6 +27,7 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
 
   const [name, setName] = useState(playlist.name);
   const [recoveryCode, setRecoveryCode] = useState<string | undefined>();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Parties this browser hosts (has the key for), to load the songs into.
   const [parties, setParties] = useState<RecentParty[]>([]);
@@ -183,10 +184,6 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
           name={name}
           recoveryCode={recoveryCode}
           onRenamed={setName}
-          onDeleted={() => {
-            forgetPlaylist(playlist.hash);
-            router.replace("/");
-          }}
         />
       ) : (
         <UnlockPanel
@@ -197,6 +194,20 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
           }}
         />
       )}
+
+      <Button
+        variant="destructive"
+        className="self-start"
+        onClick={() => setDeleteOpen(true)}
+      >
+        <Trash2 className="mr-2 h-4 w-4" />
+        Delete playlist
+      </Button>
+      <DeletePlaylistDialog
+        playlist={deleteOpen ? { hash: playlist.hash, name } : null}
+        onOpenChange={setDeleteOpen}
+        onDeleted={() => router.replace("/")}
+      />
     </main>
   );
 }
@@ -224,19 +235,17 @@ function CopyLinkButton({ url }: { url: string }) {
   );
 }
 
-/** Rename and delete, for a browser that holds the recovery code. */
+/** Renaming, for a browser that holds the recovery code. */
 function OwnerPanel({
   hash,
   name,
   recoveryCode,
   onRenamed,
-  onDeleted,
 }: {
   hash: string;
   name: string;
   recoveryCode: string;
   onRenamed: (name: string) => void;
-  onDeleted: () => void;
 }) {
   const [newName, setNewName] = useState(name);
   const [showCode, setShowCode] = useState(false);
@@ -249,11 +258,6 @@ function OwnerPanel({
       }
       toast.success("Playlist renamed.");
     },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const remove = api.playlist.delete.useMutation({
-    onSuccess: onDeleted,
     onError: (err) => toast.error(err.message),
   });
 
@@ -304,25 +308,6 @@ function OwnerPanel({
           </button>
         )}
       </div>
-
-      <Button
-        variant="destructive"
-        className="self-start"
-        disabled={remove.isPending}
-        onClick={() => {
-          if (
-            window.confirm(
-              `Permanently delete "${name}"?\n\n` +
-                "The link stops working for everyone. This can't be undone.",
-            )
-          ) {
-            remove.mutate({ hash, recoveryCode });
-          }
-        }}
-      >
-        <Trash2 className="mr-2 h-4 w-4" />
-        Delete playlist
-      </Button>
     </section>
   );
 }
@@ -353,7 +338,7 @@ function UnlockPanel({
         onClick={() => setOpen(true)}
       >
         <KeyRound className="h-4 w-4" />
-        Is this your playlist? Enter its recovery code
+        Is this your playlist? Enter its recovery code to rename it
       </button>
     );
   }

@@ -70,8 +70,8 @@ export function ExistingParties() {
           `Saved "${playlist.name}" (${playlist.songCount} ` +
             `${playlist.songCount === 1 ? "song" : "songs"}) at ` +
             `${playlistUrl(playlist.hash)}\n\n` +
-            "This browser remembers it. To edit it from another browser, " +
-            "keep this recovery code:",
+            "This browser remembers it. To rename it from another " +
+            "browser, keep this recovery code:",
           playlist.recoveryCode,
         );
       } catch (err) {

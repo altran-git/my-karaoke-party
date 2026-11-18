@@ -1,7 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { useDebouncedValue } from "@mantine/hooks";
+import { Check, Copy, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -10,9 +11,9 @@ import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
 import { rememberParty } from "~/utils/recent-parties";
 import {
+  forgetPlaylist,
   getSavedPlaylists,
   rememberPlaylist,
-  type SavedPlaylist,
 } from "~/utils/saved-playlists";
 import { getUrl } from "~/utils/url";
 import { Button } from "./ui/ui/button";
@@ -23,14 +24,6 @@ const CONTENT_CLASS =
 
 export function playlistUrl(hash: string) {
   return getUrl(`/playlists/${hash}`);
-}
-
-/** Pulls a playlist hash out of a pasted link, or takes the text as one. */
-export function parsePlaylistHash(input: string) {
-  const trimmed = input.trim();
-  const fromLink = /\/playlists\/([A-Za-z0-9_-]+)/.exec(trimmed);
-  if (fromLink) return fromLink[1]!;
-  return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -72,8 +65,8 @@ export function NewPlaylistDetails({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <span className="text-sm text-muted-foreground">
-          Share this link. Anyone with it can load the songs into their own
-          party.
+          Anyone can now find it under Load playlist. This link opens it
+          directly.
         </span>
         <div className="flex items-center gap-2">
           <Input readOnly value={url} className="text-xs font-mono" />
@@ -90,8 +83,8 @@ export function NewPlaylistDetails({
           <CopyButton text={recoveryCode} label="Copy recovery code" />
         </div>
         <span className="text-xs text-muted-foreground">
-          This browser remembers it for you. Write it down to edit or delete the
-          playlist from another browser. It won&apos;t be shown again.
+          Lets you rename the playlist. This browser remembers it; write it down
+          to rename from another browser. It won&apos;t be shown again.
         </span>
       </div>
     </div>
@@ -165,9 +158,11 @@ export function SavePlaylistDialog({
   const [includePlayed, setIncludePlayed] = useState(true);
   const [includeQueued, setIncludeQueued] = useState(true);
 
+  const utils = api.useUtils();
   const save = api.playlist.saveFromParty.useMutation({
     onSuccess: (playlist) => {
       rememberPlaylist(playlist);
+      void utils.playlist.list.invalidate();
     },
   });
 
@@ -293,41 +288,148 @@ export function SavePlaylistDialog({
   );
 }
 
-/** Lets the host pick a playlist and add its songs to the queue. */
+/**
+ * Asks the person to type DELETE before deleting a playlist. Anyone can
+ * delete any playlist, so this only guards against accidents.
+ */
+export function DeletePlaylistDialog({
+  playlist,
+  onOpenChange,
+  onDeleted,
+}: {
+  /** The playlist to delete; the dialog is open while this is set. */
+  playlist: { hash: string; name: string } | null;
+  onOpenChange: (open: boolean) => void;
+  onDeleted?: (hash: string) => void;
+}) {
+  const utils = api.useUtils();
+  const [typed, setTyped] = useState("");
+
+  const remove = api.playlist.delete.useMutation({
+    onSuccess: (_data, { hash }) => {
+      forgetPlaylist(hash);
+      void utils.playlist.list.invalidate();
+      toast.success("Playlist deleted.");
+      onOpenChange(false);
+      onDeleted?.(hash);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  useEffect(() => {
+    if (playlist) {
+      setTyped("");
+      remove.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlist?.hash]);
+
+  const confirmed = typed.trim() === "DELETE";
+
+  return (
+    <Dialog.Root open={!!playlist} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/70" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className={cn(CONTENT_CLASS, "z-[70]")}
+        >
+          <Dialog.Title className="text-lg mb-2 font-semibold">
+            {`Delete “${playlist?.name ?? ""}”?`}
+          </Dialog.Title>
+          <p className="mb-4 text-sm text-muted-foreground">
+            The playlist is deleted for everyone and its link stops working.
+            This can&apos;t be undone.
+          </p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (playlist && confirmed) {
+                remove.mutate({ hash: playlist.hash, confirm: "DELETE" });
+              }
+            }}
+            className="flex flex-col gap-1"
+          >
+            <label htmlFor="confirm-delete" className="text-sm">
+              Type <span className="font-mono font-semibold">DELETE</span> to
+              confirm
+            </label>
+            <Input
+              id="confirm-delete"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              className="font-mono"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </Dialog.Close>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={!confirmed || remove.isPending}
+              >
+                {remove.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Delete
+              </Button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+const LIST_PAGE_SIZE = 50;
+
+/** Lets the host pick any saved playlist and add its songs to the queue. */
 export function LoadPlaylistDialog({
   open,
   onOpenChange,
   partyHash,
   hostKey,
 }: PartyHostProps) {
-  const utils = api.useUtils();
-
-  const [saved, setSaved] = useState<SavedPlaylist[]>([]);
-  const [link, setLink] = useState("");
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
   const [mode, setMode] = useState<LoadMode>("append");
   const [shuffle, setShuffle] = useState(false);
   const [loadingHash, setLoadingHash] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<{
+    hash: string;
+    name: string;
+  } | null>(null);
+  // Playlists this browser created or unlocked, to mark them as yours.
+  const [ownHashes, setOwnHashes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) {
-      setSaved(getSavedPlaylists());
-      setLink("");
-      setLinkError(null);
+      setSearch("");
+      setOwnHashes(
+        new Set(
+          getSavedPlaylists()
+            .filter((p) => p.recoveryCode)
+            .map((p) => p.hash),
+        ),
+      );
     }
   }, [open]);
 
-  // Current names and song counts; drops playlists deleted since.
-  const details = api.playlist.getMany.useQuery(
-    { hashes: saved.map((p) => p.hash) },
-    { enabled: open && saved.length > 0 },
+  const list = api.playlist.list.useInfiniteQuery(
+    { search: debouncedSearch || undefined, limit: LIST_PAGE_SIZE },
+    {
+      enabled: open,
+      getNextPageParam: (last) => last.nextCursor,
+      refetchOnWindowFocus: false,
+    },
   );
-  const playlists = details.data
-    ? saved.flatMap((p) => {
-        const d = details.data.find((x) => x.hash === p.hash);
-        return d ? [{ ...p, name: d.name, songCount: d.songCount }] : [];
-      })
-    : saved.map((p) => ({ ...p, songCount: undefined }));
+  const playlists = list.data?.pages.flatMap((page) => page.items) ?? [];
 
   const load = api.playlist.loadIntoParty.useMutation({
     onSuccess: ({ added, skipped }) => {
@@ -347,28 +449,6 @@ export function LoadPlaylistDialog({
     load.mutate({ partyHash, hostKey, playlistHash, mode, shuffle });
   }
 
-  async function loadFromLink(e: React.FormEvent) {
-    e.preventDefault();
-    const hash = parsePlaylistHash(link);
-    if (!hash) {
-      setLinkError("Paste a playlist link.");
-      return;
-    }
-
-    setLinkError(null);
-    try {
-      const playlist = await utils.playlist.get.fetch({ hash });
-      if (!playlist) {
-        setLinkError("No playlist found at that link.");
-        return;
-      }
-      rememberPlaylist({ hash: playlist.hash, name: playlist.name });
-      loadPlaylist(playlist.hash);
-    } catch {
-      setLinkError("Couldn't look up that link. Please try again.");
-    }
-  }
-
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -386,8 +466,25 @@ export function LoadPlaylistDialog({
             onShuffleChange={setShuffle}
           />
 
-          {playlists.length > 0 ? (
-            <ul className="mb-4 flex max-h-64 flex-col gap-1 overflow-y-auto">
+          <Input
+            aria-label="Search playlists"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search playlists by name..."
+            autoComplete="off"
+            className="mb-2"
+          />
+
+          {list.isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : list.isError ? (
+            <p className="py-4 text-sm text-red-400">
+              Couldn&apos;t load the playlists. Please try again.
+            </p>
+          ) : playlists.length > 0 ? (
+            <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">
               {playlists.map((p) => (
                 <li
                   key={p.hash}
@@ -401,12 +498,10 @@ export function LoadPlaylistDialog({
                     >
                       {p.name}
                     </Link>
-                    {p.songCount !== undefined && (
-                      <span className="text-xs text-muted-foreground">
-                        {p.songCount} {p.songCount === 1 ? "song" : "songs"}
-                        {p.recoveryCode ? " · yours" : ""}
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {p.songCount} {p.songCount === 1 ? "song" : "songs"}
+                      {ownHashes.has(p.hash) ? " · yours" : ""}
+                    </span>
                   </div>
                   <Button
                     size="sm"
@@ -419,48 +514,51 @@ export function LoadPlaylistDialog({
                       "Load"
                     )}
                   </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Delete ${p.name}`}
+                    title="Delete this playlist"
+                    className="h-8 w-8 text-red-400 hover:text-red-300"
+                    onClick={() => setToDelete({ hash: p.hash, name: p.name })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </li>
               ))}
+              {list.hasNextPage && (
+                <li className="flex justify-center py-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={list.isFetchingNextPage}
+                    onClick={() => void list.fetchNextPage()}
+                  >
+                    {list.isFetchingNextPage ? "Loading..." : "Show more"}
+                  </Button>
+                </li>
+              )}
             </ul>
           ) : (
-            <p className="mb-4 text-sm text-muted-foreground">
-              No playlists in this browser yet. Save one from a party, or paste
-              a link someone shared with you.
+            <p className="py-4 text-sm text-muted-foreground">
+              {debouncedSearch
+                ? `No playlists match “${debouncedSearch}”.`
+                : "No playlists yet. Save one from a party first."}
             </p>
           )}
-
-          <form onSubmit={loadFromLink} className="flex flex-col gap-1">
-            <label htmlFor="playlist-link" className="text-sm">
-              Or paste a playlist link
-            </label>
-            <div className="flex gap-2">
-              <Input
-                id="playlist-link"
-                value={link}
-                onChange={(e) => {
-                  setLink(e.target.value);
-                  setLinkError(null);
-                }}
-                placeholder={playlistUrl("…")}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={load.isPending || !link.trim()}
-              >
-                Load
-              </Button>
-            </div>
-            {linkError && <p className="text-sm text-red-400">{linkError}</p>}
-          </form>
 
           <div className="mt-5 flex justify-end">
             <Dialog.Close asChild>
               <Button variant="outline">Close</Button>
             </Dialog.Close>
           </div>
+
+          <DeletePlaylistDialog
+            playlist={toDelete}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setToDelete(null);
+            }}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

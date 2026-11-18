@@ -130,6 +130,52 @@ export const playlistRouter = createTRPCRouter({
       };
     }),
 
+  /**
+   * Every saved playlist, newest first, optionally filtered by name. Anyone
+   * can see and load any playlist.
+   */
+  list: publicProcedure
+    .input(
+      z.object({
+        search: z.string().trim().max(100).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        /** `nextCursor` from the previous page. */
+        cursor: z.number().int().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const playlists = await ctx.db.playlist.findMany({
+        where: {
+          ...(input.search
+            ? { name: { contains: input.search, mode: "insensitive" } }
+            : {}),
+          ...(input.cursor ? { id: { lt: input.cursor } } : {}),
+        },
+        orderBy: { id: "desc" },
+        take: input.limit + 1,
+        select: {
+          id: true,
+          hash: true,
+          name: true,
+          createdAt: true,
+          _count: { select: { songs: true } },
+        },
+      });
+
+      const hasMore = playlists.length > input.limit;
+      const page = hasMore ? playlists.slice(0, input.limit) : playlists;
+
+      return {
+        items: page.map((p) => ({
+          hash: p.hash,
+          name: p.name,
+          createdAt: p.createdAt,
+          songCount: p._count.songs,
+        })),
+        nextCursor: hasMore ? page[page.length - 1]!.id : undefined,
+      };
+    }),
+
   /** Names and song counts of several playlists, for lists in the UI. */
   getMany: publicProcedure
     .input(z.object({ hashes: z.array(Hash).max(100) }))
@@ -213,18 +259,26 @@ export const playlistRouter = createTRPCRouter({
       return { updated: true };
     }),
 
+  /**
+   * Anyone can delete any playlist. The person has to type DELETE first,
+   * which guards against accidents, not against people.
+   */
   delete: publicProcedure
-    .input(z.object({ hash: Hash, recoveryCode: Secret }))
+    .input(
+      z.object({
+        hash: Hash,
+        confirm: z.literal("DELETE", {
+          errorMap: () => ({ message: "Type DELETE to confirm." }),
+        }),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const playlist = await requirePlaylistOwner(
-        ctx.db,
-        input.hash,
-        input.recoveryCode,
-      );
+      // deleteMany, so a playlist someone else just deleted isn't an error.
+      const { count } = await ctx.db.playlist.deleteMany({
+        where: { hash: input.hash },
+      });
 
-      await ctx.db.playlist.delete({ where: { id: playlist.id } });
-
-      log.info("Playlist deleted", { hash: playlist.hash });
+      if (count > 0) log.info("Playlist deleted", { hash: input.hash });
       return { deleted: true };
     }),
 

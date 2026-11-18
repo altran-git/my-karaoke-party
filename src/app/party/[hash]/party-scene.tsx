@@ -42,7 +42,6 @@ export function PartyScene({
   const [name] = useLocalStorage<string>({ key: "name" });
   const router = useRouter();
 
-
   const [playlist, setPlaylist] = useState<KaraokeParty["playlist"]>(
     initialPlaylist?.playlist ?? [],
   );
@@ -254,79 +253,84 @@ export function PartyScene({
                       className="flex flex-row items-center gap-2 p-2 text-left first:pt-0 last:pb-0"
                     >
                       <div className="min-w-0 grow">
-                        <div className="truncate">{decode(video.title)}</div>
-                        <div className="truncate text-xs opacity-75">
+                        {/* Up to two lines, so long titles stay readable next to the buttons. */}
+                        <div className="line-clamp-2 break-words leading-snug">
+                          {decode(video.title)}
+                        </div>
+                        <div className="text-xs truncate opacity-75">
                           {isPlaying ? "Now playing" : `#${i}`}
                           {video.singerName ? ` · ${video.singerName}` : ""}
                         </div>
                       </div>
 
-                      {!isPlaying && (
-                        <>
-                          <button
-                            type="button"
-                            aria-label="Play now"
-                            title="Play this song now"
-                            className="rounded p-2 text-emerald-300 hover:bg-white/20"
-                            onClick={() =>
-                              setPendingPlayNow({
-                                id: video.id,
-                                title: decode(video.title),
-                              })
-                            }
-                          >
-                            <PlayCircle size={20} />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Move to top"
-                            title="Move to the top of the queue (next to play)"
-                            className="rounded p-2 hover:bg-white/20 disabled:opacity-30"
-                            disabled={i <= 1}
-                            onClick={() => moveSong(video.id, 1)}
-                          >
-                            <ChevronsUp size={20} />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Move up"
-                            title="Move up one spot"
-                            className="rounded p-2 hover:bg-white/20 disabled:opacity-30"
-                            disabled={i <= 1}
-                            onClick={() => moveSong(video.id, i - 1)}
-                          >
-                            <ChevronUp size={20} />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Move down"
-                            title="Move down one spot"
-                            className="rounded p-2 hover:bg-white/20 disabled:opacity-30"
-                            disabled={i >= nextVideos.length - 1}
-                            onClick={() => moveSong(video.id, i + 1)}
-                          >
-                            <ChevronDown size={20} />
-                          </button>
-                        </>
-                      )}
+                      <div className="flex shrink-0 flex-row items-center">
+                        {!isPlaying && (
+                          <>
+                            <button
+                              type="button"
+                              aria-label="Play now"
+                              title="Play this song now"
+                              className="rounded p-1.5 text-emerald-300 hover:bg-white/20"
+                              onClick={() =>
+                                setPendingPlayNow({
+                                  id: video.id,
+                                  title: decode(video.title),
+                                })
+                              }
+                            >
+                              <PlayCircle size={20} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move to top"
+                              title="Move to the top of the queue (next to play)"
+                              className="rounded p-1.5 hover:bg-white/20 disabled:opacity-30"
+                              disabled={i <= 1}
+                              onClick={() => moveSong(video.id, 1)}
+                            >
+                              <ChevronsUp size={20} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move up"
+                              title="Move up one spot"
+                              className="rounded p-1.5 hover:bg-white/20 disabled:opacity-30"
+                              disabled={i <= 1}
+                              onClick={() => moveSong(video.id, i - 1)}
+                            >
+                              <ChevronUp size={20} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move down"
+                              title="Move down one spot"
+                              className="rounded p-1.5 hover:bg-white/20 disabled:opacity-30"
+                              disabled={i >= nextVideos.length - 1}
+                              onClick={() => moveSong(video.id, i + 1)}
+                            >
+                              <ChevronDown size={20} />
+                            </button>
+                          </>
+                        )}
 
-                      <button
-                        type="button"
-                        aria-label="Remove from queue"
-                        title="Remove from queue"
-                        className="rounded p-2 text-red-300 hover:bg-white/20"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Remove "${decode(video.title)}" from the queue?`,
-                            )
-                          ) {
-                            removeSong(video.id);
-                          }
-                        }}
-                      >
-                        <X size={20} />
-                      </button>
+                        <button
+                          type="button"
+                          aria-label="Remove from queue"
+                          title="Remove from queue"
+                          className="rounded p-1.5 text-red-300 hover:bg-white/20"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Remove "${decode(video.title)}" from the queue?`,
+                              )
+                            ) {
+                              removeSong(video.id);
+                            }
+                          }}
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
                     </li>
                   );
                 })}

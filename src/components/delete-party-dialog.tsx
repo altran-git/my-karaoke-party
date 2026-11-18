@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "~/trpc/react";
 import type { RecentParty } from "~/utils/recent-parties";
-import { NewPlaylistDetails } from "./playlist-dialogs";
 import { Button } from "./ui/ui/button";
 
 type SavedPlaylist = { hash: string; name: string; songCount: number };
@@ -35,8 +34,6 @@ export function DeletePartyDialog({
   // Which button was pressed, while saving and deleting are in progress.
   const [working, setWorking] = useState<"save" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Set once the party is deleted after its songs were saved.
-  const [saved, setSaved] = useState<SavedPlaylist | null>(null);
 
   const savePlaylist = api.playlist.saveFromParty.useMutation();
   const deleteParty = api.party.delete.useMutation();
@@ -45,7 +42,6 @@ export function DeletePartyDialog({
     if (party) {
       setWorking(null);
       setError(null);
-      setSaved(null);
     }
   }, [party?.hash]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -93,17 +89,16 @@ export function DeletePartyDialog({
     setWorking(null);
     onDeleted(party.hash);
 
-    if (playlist) {
-      // Keep the dialog open to show where the songs went.
-      setSaved(playlist);
-    } else {
-      toast.success(
-        saveFirst
+    toast.success(
+      playlist
+        ? `Deleted “${party.name}”. Its ${playlist.songCount} ${
+            playlist.songCount === 1 ? "song was" : "songs were"
+          } saved as “${playlist.name}”.`
+        : saveFirst
           ? `Deleted “${party.name}”. It had no songs to save.`
           : `Deleted “${party.name}”.`,
-      );
-      onOpenChange(false);
-    }
+    );
+    onOpenChange(false);
   }
 
   return (
@@ -120,65 +115,44 @@ export function DeletePartyDialog({
           aria-describedby={undefined}
           className="fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border bg-background p-5 text-left text-foreground shadow-xl"
         >
-          {saved ? (
-            <>
-              <Dialog.Title className="text-lg mb-2 font-semibold">
-                Party deleted
-              </Dialog.Title>
-              <p className="mb-4 text-sm">
-                {`Its songs were saved as “${saved.name}” (${saved.songCount} ${
-                  saved.songCount === 1 ? "song" : "songs"
-                }).`}
-              </p>
-              <NewPlaylistDetails hash={saved.hash} />
-              <div className="mt-5 flex justify-end">
-                <Dialog.Close asChild>
-                  <Button>Done</Button>
-                </Dialog.Close>
-              </div>
-            </>
-          ) : (
-            <>
-              <Dialog.Title className="text-lg mb-2 font-semibold">
-                {`Delete “${party?.name ?? ""}”?`}
-              </Dialog.Title>
-              <p className="mb-4 text-sm text-muted-foreground">
-                The song queue is erased, anyone still connected is sent back to
-                the start page, and the party code can be used again. This
-                can&apos;t be undone.
-              </p>
-              <p className="text-sm font-medium">
-                Save its songs (the ones sung and the ones still queued) as a
-                playlist first?
-              </p>
+          <Dialog.Title className="text-lg mb-2 font-semibold">
+            {`Delete “${party?.name ?? ""}”?`}
+          </Dialog.Title>
+          <p className="mb-4 text-sm text-muted-foreground">
+            The song queue is erased, anyone still connected is sent back to the
+            start page, and the party code can be used again. This can&apos;t be
+            undone.
+          </p>
+          <p className="text-sm font-medium">
+            Save its songs (the ones sung and the ones still queued) as a
+            playlist first?
+          </p>
 
-              {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
 
-              <div className="mt-5 flex flex-wrap justify-end gap-2">
-                <Dialog.Close asChild>
-                  <Button variant="outline" disabled={!!working}>
-                    Cancel
-                  </Button>
-                </Dialog.Close>
-                <Button
-                  variant="destructive"
-                  disabled={!!working}
-                  onClick={() => void run(false)}
-                >
-                  {working === "delete" && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  No, just delete
-                </Button>
-                <Button disabled={!!working} onClick={() => void run(true)}>
-                  {working === "save" && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Yes, save first
-                </Button>
-              </div>
-            </>
-          )}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button variant="outline" disabled={!!working}>
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button
+              variant="destructive"
+              disabled={!!working}
+              onClick={() => void run(false)}
+            >
+              {working === "delete" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              No
+            </Button>
+            <Button disabled={!!working} onClick={() => void run(true)}>
+              {working === "save" && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Yes
+            </Button>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

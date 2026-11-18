@@ -22,13 +22,18 @@ model Video {
 }
 
 model Party {
-  id          Int      @id @default(autoincrement())
-  hash        String?  @unique
-  name        String
-  createdAt   DateTime @default(now())
-  /// SHA-256 of the secret key given to the browser that created the party.
-  /// Proves the host when deleting. Null for parties created before this.
-  hostKeyHash String?
+  id                 Int       @id @default(autoincrement())
+  hash               String?   @unique
+  name               String
+  createdAt          DateTime  @default(now())
+  /// SHA-256 of the host's PIN (or, for parties created before PINs, of a
+  /// generated host code). Proves the host when loading playlists or
+  /// deleting. Null for parties created before either existed.
+  hostKeyHash        String?
+  /// Wrong host PINs in a row. Five lock PIN checks for a while (see
+  /// hostLockedUntil), so a 4-digit PIN can't be guessed by trying them all.
+  hostFailedAttempts Int       @default(0)
+  hostLockedUntil    DateTime?
 
   @@index([hash])
 }

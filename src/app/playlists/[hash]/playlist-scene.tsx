@@ -133,7 +133,7 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
             </Link>{" "}
             and come back to this link, or open your party&apos;s player screen
             and use <span className="font-semibold">Load playlist</span>. It
-            asks for the host code if this browser didn&apos;t create the party.
+            asks for the host PIN if this browser didn&apos;t create the party.
           </p>
         )}
       </section>

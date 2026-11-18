@@ -519,61 +519,34 @@ export function LoadPlaylistDialog({
   );
 }
 
-/** A party's host code, with a copy button. */
+/** Parties created before PINs have a longer host code instead. */
+function hostKeyLabel(hostKey: string) {
+  return /^\d{4}$/.test(hostKey) ? "Host PIN" : "Host code";
+}
+
+/** The party's host PIN (or an older party's host code). */
 export function HostCodeBox({ hostKey }: { hostKey: string }) {
+  const label = hostKeyLabel(hostKey);
+
   return (
     <div className="flex flex-col gap-1 rounded-md border border-amber-500/60 bg-amber-500/10 p-3">
-      <span className="text-sm font-semibold">Host code</span>
+      <span className="text-sm font-semibold">{label}</span>
       <div className="flex items-center gap-2">
         <span className="text-lg select-all break-all font-mono tracking-wider">
           {hostKey}
         </span>
-        <CopyButton text={hostKey} label="Copy host code" />
+        <CopyButton text={hostKey} label={`Copy ${label.toLowerCase()}`} />
       </div>
       <span className="text-xs text-muted-foreground">
-        This browser remembers it. Write it down to load playlists or delete the
-        party from another browser or device. Don&apos;t share it with guests.
+        Needed to load playlists or delete the party from another browser or
+        device. Don&apos;t share it with guests.
       </span>
     </div>
   );
 }
 
-/** Shown once, right after the party is created. */
-export function NewPartyHostCodeDialog({
-  open,
-  onOpenChange,
-  hostKey,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  hostKey: string;
-}) {
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
-        <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
-          <Dialog.Title className="text-lg mb-4 font-semibold">
-            Your party is ready
-          </Dialog.Title>
-          <HostCodeBox hostKey={hostKey} />
-          <p className="text-xs mt-3 text-muted-foreground">
-            You can see this code again with &ldquo;Host code&rdquo; under the
-            party code.
-          </p>
-          <div className="mt-5 flex justify-end">
-            <Dialog.Close asChild>
-              <Button>Got it</Button>
-            </Dialog.Close>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
 /**
- * Asks for the party's host code in a browser that doesn't have it, and
+ * Asks for the party's host PIN in a browser that doesn't have it, and
  * remembers it there once the server accepts it.
  */
 export function UnlockHostDialog({
@@ -612,12 +585,12 @@ export function UnlockHostDialog({
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
         <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
           <Dialog.Title className="text-lg mb-2 font-semibold">
-            Enter the host code
+            Enter the host PIN
           </Dialog.Title>
           <p className="mb-4 text-sm text-muted-foreground">
-            Only the host can load playlists into this party. The host code was
-            shown when the party was created, and under &ldquo;Host code&rdquo;
-            in the browser that created it.
+            Only the host can load playlists into this party. Enter the PIN
+            chosen when the party was created. For an older party, enter its
+            host code.
           </p>
           <form
             onSubmit={(e) => {
@@ -627,7 +600,7 @@ export function UnlockHostDialog({
             className="flex flex-col gap-1"
           >
             <label htmlFor="host-code" className="text-sm">
-              Host code
+              Host PIN
             </label>
             <div className="flex gap-2">
               <Input
@@ -637,7 +610,7 @@ export function UnlockHostDialog({
                   setCode(e.target.value);
                   verify.reset();
                 }}
-                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                placeholder="4-digit PIN"
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -666,7 +639,7 @@ export function UnlockHostDialog({
   );
 }
 
-/** Shows this browser's host code again. */
+/** Shows this browser's host PIN (or older host code) again. */
 export function HostCodeDialog({
   open,
   onOpenChange,
@@ -682,7 +655,7 @@ export function HostCodeDialog({
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
         <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
           <Dialog.Title className="text-lg mb-4 font-semibold">
-            Host code
+            {hostKeyLabel(hostKey)}
           </Dialog.Title>
           <HostCodeBox hostKey={hostKey} />
           <div className="mt-5 flex justify-end">

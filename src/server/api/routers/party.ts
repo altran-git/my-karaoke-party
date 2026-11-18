@@ -6,9 +6,8 @@ import { fetchPartyServer } from "~/server/party-server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import {
   canonicalHostKey,
-  generateHostCode,
   hashHostCode,
-  hostKeyMatches,
+  checkHostKey,
 } from "~/server/utils/secrets";
 import { normalizeCustomCode, validateCustomCode } from "~/server/utils/sqids";
 
@@ -26,6 +25,8 @@ export const partyRouter = createTRPCRouter({
       z.object({
         name: z.string().min(3),
         code: z.string().max(100).optional(),
+        /** Proves the host (to load playlists or delete the party). */
+        pin: z.string().regex(/^\d{4}$/, "The PIN must be 4 digits."),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -51,11 +52,11 @@ export const partyRouter = createTRPCRouter({
         }
       }
 
-      // Only the browser that creates the party gets this key, which proves
-      // the host (to load playlists or delete the party). It's a host
-      // code the host can write down and type into another browser. The
-      // database keeps just its hash.
-      const hostKey = generateHostCode();
+      // The host's PIN proves the host (to load playlists or delete the
+      // party). The creating browser keeps it; other browsers ask for it.
+      // The database keeps just its hash, and checkHostKey locks PIN checks
+      // after a few wrong tries so the PIN can't be guessed.
+      const hostKey = input.pin;
 
       let party;
       try {
@@ -108,12 +109,12 @@ export const partyRouter = createTRPCRouter({
         return { deleted: true };
       }
 
-      if (!hostKeyMatches(party.hostKeyHash, input.hostKey)) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only the browser that started this party can delete it.",
-        });
-      }
+      await checkHostKey(
+        ctx.db,
+        party,
+        input.hostKey,
+        "Only the host can delete this party.",
+      );
 
       // Erase the queue on the live server first, so a failure there leaves
       // the party intact and the host can try again.
@@ -136,8 +137,8 @@ export const partyRouter = createTRPCRouter({
     }),
 
   /**
-   * Checks a host code typed into another browser. Returns the key in the
-   * form that browser should keep.
+   * Checks a host PIN (or an older party's host code) typed into another
+   * browser. Returns the key in the form that browser should keep.
    */
   verifyHost: publicProcedure
     .input(z.object({ hash: z.string(), hostKey: z.string().min(1).max(200) }))
@@ -154,17 +155,17 @@ export const partyRouter = createTRPCRouter({
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message:
-            "This party was created before host codes existed, so it can " +
+            "This party was created before host PINs existed, so it can " +
             "only be hosted from the browser that created it.",
         });
       }
 
-      if (!hostKeyMatches(party.hostKeyHash, input.hostKey)) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "That host code doesn't match this party.",
-        });
-      }
+      await checkHostKey(
+        ctx.db,
+        party,
+        input.hostKey,
+        "That PIN doesn't match this party.",
+      );
 
       return { hostKey: canonicalHostKey(party.hostKeyHash, input.hostKey) };
     }),

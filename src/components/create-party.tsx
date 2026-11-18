@@ -29,6 +29,7 @@ export function CreateParty() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [pin, setPin] = useState("");
 
   const createParty = api.party.create.useMutation({
     onSuccess: (party) => {
@@ -44,8 +45,7 @@ export function CreateParty() {
 
       // Redirect to the party page
       setTimeout(() => {
-        // "created" makes the player screen show the host code once.
-        router.push(`/player/${party.hash}?created=1`);
+        router.push(`/player/${party.hash}`);
       }, 1000);
     },
   });
@@ -91,7 +91,7 @@ export function CreateParty() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          createParty.mutate({ name, code: code.trim() || undefined });
+          createParty.mutate({ name, code: code.trim() || undefined, pin });
         }}
         className="flex w-full max-w-xs flex-col gap-2"
       >
@@ -122,6 +122,25 @@ export function CreateParty() {
           autoCapitalize="off"
           spellCheck={false}
           className="font-mono placeholder:font-sans"
+        />
+
+        <Input
+          name="pin"
+          type="text"
+          inputMode="numeric"
+          placeholder="Host PIN (4 digits)"
+          title="You'll need this PIN to load playlists or delete the party from another browser or device."
+          value={pin}
+          onChange={(e) => {
+            setPin(e.target.value.replace(/\D/g, "").slice(0, 4));
+            if (createParty.isError) createParty.reset();
+          }}
+          pattern="\d{4}"
+          minLength={4}
+          maxLength={4}
+          required
+          autoComplete="off"
+          className="font-mono tracking-widest placeholder:font-sans placeholder:tracking-normal"
         />
 
         {createParty.error && (

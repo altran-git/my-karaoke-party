@@ -38,7 +38,6 @@ import { forgetParty, getHostKey, rememberParty } from "~/utils/recent-parties";
 import {
   HostCodeDialog,
   LoadPlaylistDialog,
-  NewPartyHostCodeDialog,
   SavePlaylistDialog,
   UnlockHostDialog,
 } from "~/components/playlist-dialogs";
@@ -62,32 +61,21 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // The host key proves this browser hosts the party, which loading a
+  // The host PIN proves this browser hosts the party, which loading a
   // playlist needs. The browser that created the party has it; any other
-  // browser gets it by typing the host code.
+  // browser gets it by typing the PIN.
   const [hostKey, setHostKey] = useState<string | undefined>();
   const [saveOpen, setSaveOpen] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [hostCodeOpen, setHostCodeOpen] = useState(false);
-  const [newPartyOpen, setNewPartyOpen] = useState(false);
 
   // Remember this party in this browser so the host can come back to it from
   // the start page.
   useEffect(() => {
     if (party.hash) {
       rememberParty({ hash: party.hash, name: party.name });
-      const key = getHostKey(party.hash);
-      setHostKey(key);
-
-      // Just created (see create-party.tsx): show the host code once, then
-      // drop the marker so a reload doesn't show it again.
-      const url = new URL(window.location.href);
-      if (url.searchParams.has("created")) {
-        if (key) setNewPartyOpen(true);
-        url.searchParams.delete("created");
-        window.history.replaceState(null, "", url.pathname + url.search);
-      }
+      setHostKey(getHostKey(party.hash));
     }
   }, [party.hash, party.name]);
 
@@ -298,7 +286,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                   className="text-xs mt-2 text-slate-300 underline-offset-4 hover:underline"
                   onClick={() => setHostCodeOpen(true)}
                 >
-                  Host code
+                  {/^\d{4}$/.test(hostKey) ? "Host PIN" : "Host code"}
                 </button>
               )}
               {hostKey && (
@@ -312,11 +300,6 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                   <HostCodeDialog
                     open={hostCodeOpen}
                     onOpenChange={setHostCodeOpen}
-                    hostKey={hostKey}
-                  />
-                  <NewPartyHostCodeDialog
-                    open={newPartyOpen}
-                    onOpenChange={setNewPartyOpen}
                     hostKey={hostKey}
                   />
                 </>

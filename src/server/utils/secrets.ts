@@ -16,9 +16,10 @@ export function secretMatches(storedHash: string | null, secret: string) {
 }
 
 /**
- * Checks a party host key. New parties get a host code as their key
- * (stored hashed in its normalized form, so dashes and capitals don't
- * matter); older parties have a random key that must match exactly.
+ * Compares a host key with the stored hash. New parties use a 4-digit PIN;
+ * earlier ones a host code (stored normalized, so dashes and capitals don't
+ * matter) or a random key that must match exactly. Use checkHostKey, which
+ * adds the lockout, rather than calling this directly.
  */
 export function hostKeyMatches(storedHash: string | null, hostKey: string) {
   return (
@@ -28,8 +29,8 @@ export function hostKeyMatches(storedHash: string | null, hostKey: string) {
 }
 
 /**
- * The form of a host key that the browser should keep: the formatted
- * host code for new parties, or the key exactly as typed for old ones.
+ * The form of a host key that the browser should keep: the PIN or the
+ * formatted host code, or an old random key exactly as typed.
  */
 export function canonicalHostKey(storedHash: string | null, hostKey: string) {
   return secretMatches(storedHash, normalizeHostCode(hostKey))
@@ -37,15 +38,87 @@ export function canonicalHostKey(storedHash: string | null, hostKey: string) {
     : hostKey.trim();
 }
 
+/** Wrong host PINs allowed in a row before PIN checks are locked. */
+const MAX_WRONG_HOST_KEYS = 5;
+const HOST_LOCK_MS = 15 * 60 * 1000;
+
+function lockedError(lockedUntil: Date | null) {
+  const minutes = lockedUntil
+    ? Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60_000))
+    : Math.round(HOST_LOCK_MS / 60_000);
+  return new TRPCError({
+    code: "TOO_MANY_REQUESTS",
+    message: `Too many wrong PINs. Try again in ${minutes} ${
+      minutes === 1 ? "minute" : "minutes"
+    }.`,
+  });
+}
+
 /**
- * Loads the party and checks that `hostKey` is the key its creator got.
- * Throws NOT_FOUND or FORBIDDEN otherwise.
+ * Checks `hostKey` (a PIN, or an older party's host code) against the
+ * party, with a lockout: after MAX_WRONG_HOST_KEYS wrong tries in a row, all
+ * checks fail for HOST_LOCK_MS, so a 4-digit PIN can't be found by trying
+ * every one. Throws TOO_MANY_REQUESTS or FORBIDDEN.
+ */
+export async function checkHostKey(
+  db: typeof Db,
+  party: { id: number; hostKeyHash: string | null },
+  hostKey: string,
+  forbiddenMessage = "Only the host of this party can do that.",
+) {
+  // Reserve an attempt first, in one atomic update, so many guesses sent at
+  // once can't slip past the limit before it's recorded.
+  const reserved = await db.party.updateMany({
+    where: {
+      id: party.id,
+      hostFailedAttempts: { lt: MAX_WRONG_HOST_KEYS },
+      OR: [{ hostLockedUntil: null }, { hostLockedUntil: { lt: new Date() } }],
+    },
+    data: { hostFailedAttempts: { increment: 1 } },
+  });
+
+  if (reserved.count === 0) {
+    const current = await db.party.findUnique({
+      where: { id: party.id },
+      select: { hostLockedUntil: true },
+    });
+    throw lockedError(current?.hostLockedUntil ?? null);
+  }
+
+  if (hostKeyMatches(party.hostKeyHash, hostKey)) {
+    await db.party.update({
+      where: { id: party.id },
+      data: { hostFailedAttempts: 0, hostLockedUntil: null },
+    });
+    return;
+  }
+
+  const after = await db.party.findUnique({
+    where: { id: party.id },
+    select: { hostFailedAttempts: true },
+  });
+
+  if ((after?.hostFailedAttempts ?? 0) >= MAX_WRONG_HOST_KEYS) {
+    const lockedUntil = new Date(Date.now() + HOST_LOCK_MS);
+    await db.party.update({
+      where: { id: party.id },
+      data: { hostFailedAttempts: 0, hostLockedUntil: lockedUntil },
+    });
+    throw lockedError(lockedUntil);
+  }
+
+  throw new TRPCError({ code: "FORBIDDEN", message: forbiddenMessage });
+}
+
+/**
+ * Loads the party and checks that `hostKey` is its host's PIN or code.
+ * Throws NOT_FOUND, FORBIDDEN or TOO_MANY_REQUESTS otherwise.
  */
 export async function requirePartyHost(
   db: typeof Db,
   hash: string,
   hostKey: string,
-  forbiddenMessage = "Only the browser that started this party can do that.",
+  forbiddenMessage?: string,
 ) {
   const party = await db.party.findUnique({ where: { hash } });
 
@@ -53,26 +126,9 @@ export async function requirePartyHost(
     throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
   }
 
-  if (!hostKeyMatches(party.hostKeyHash, hostKey)) {
-    throw new TRPCError({ code: "FORBIDDEN", message: forbiddenMessage });
-  }
+  await checkHostKey(db, party, hostKey, forbiddenMessage);
 
   return { ...party, hash: party.hash };
-}
-
-// Crockford base32: no I, L, O or U, so a code is hard to misread or mistype.
-const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const CODE_LENGTH = 20; // 100 bits: far too many to guess.
-
-/** A new host code like "K7QF-29XM-TR4P-8BWD-3NHA". */
-export function generateHostCode() {
-  const bytes = randomBytes(CODE_LENGTH);
-  let code = "";
-  for (const byte of bytes) {
-    // 256 is a multiple of 32, so every character is equally likely.
-    code += CODE_ALPHABET[byte % 32];
-  }
-  return formatHostCode(code);
 }
 
 /**

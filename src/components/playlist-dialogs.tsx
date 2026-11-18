@@ -107,20 +107,40 @@ export function SavePlaylistDialog({
   open,
   onOpenChange,
   partyHash,
+  hostKey,
   defaultName,
-}: Omit<PartyHostProps, "hostKey"> & { defaultName: string }) {
+}: Omit<PartyHostProps, "hostKey"> & {
+  /** Set in the host's browser: lets them overwrite their own playlists. */
+  hostKey?: string;
+  defaultName: string;
+}) {
   const [name, setName] = useState(defaultName);
   const [includePlayed, setIncludePlayed] = useState(true);
   const [includeQueued, setIncludeQueued] = useState(true);
+  // Hash of the playlist to overwrite, or "" to save a new one.
+  const [overwriteHash, setOverwriteHash] = useState("");
 
   const utils = api.useUtils();
+
+  // Playlists saved from a party with this code and host PIN.
+  const overwritable = api.playlist.overwritable.useQuery(
+    { partyHash, hostKey: hostKey ?? "" },
+    { enabled: open && !!hostKey, refetchOnWindowFocus: false, retry: false },
+  );
+  const ownPlaylists = overwritable.data ?? [];
+  const overwriting = overwriteHash !== "";
+
   const save = api.playlist.saveFromParty.useMutation({
     onSuccess: (playlist) => {
       void utils.playlist.list.invalidate();
+      void utils.playlist.overwritable.invalidate();
+      const songs = `${playlist.songCount} ${
+        playlist.songCount === 1 ? "song" : "songs"
+      }`;
       toast.success(
-        `Saved “${playlist.name}” (${playlist.songCount} ${
-          playlist.songCount === 1 ? "song" : "songs"
-        }).`,
+        playlist.overwritten
+          ? `Overwrote “${playlist.name}” (${songs}).`
+          : `Saved “${playlist.name}” (${songs}).`,
       );
       onOpenChange(false);
     },
@@ -131,6 +151,7 @@ export function SavePlaylistDialog({
       setName(defaultName);
       setIncludePlayed(true);
       setIncludeQueued(true);
+      setOverwriteHash("");
       save.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,9 +171,13 @@ export function SavePlaylistDialog({
               e.preventDefault();
               save.mutate({
                 partyHash,
-                name,
+                name: overwriting
+                  ? (ownPlaylists.find((p) => p.hash === overwriteHash)?.name ??
+                    name)
+                  : name,
                 includePlayed,
                 includeQueued,
+                ...(overwriting ? { overwriteHash, hostKey } : {}),
               });
             }}
             className="flex flex-col gap-3"
@@ -184,16 +209,72 @@ export function SavePlaylistDialog({
                 Songs in the queue, including the one playing now
               </label>
             </fieldset>
-            <label htmlFor="playlist-name" className="text-sm">
-              Playlist name
-            </label>
-            <Input
-              id="playlist-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              required
-            />
+            {ownPlaylists.length > 0 && (
+              <fieldset className="flex flex-col gap-2 text-sm">
+                <legend className="mb-1 text-muted-foreground">Save as</legend>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="save-target"
+                    checked={!overwriting}
+                    onChange={() => {
+                      setOverwriteHash("");
+                      save.reset();
+                    }}
+                  />
+                  A new playlist
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="save-target"
+                    checked={overwriting}
+                    onChange={() => {
+                      setOverwriteHash(ownPlaylists[0]!.hash);
+                      save.reset();
+                    }}
+                  />
+                  Overwrite one of your playlists
+                </label>
+              </fieldset>
+            )}
+            {overwriting ? (
+              <>
+                <label htmlFor="overwrite-playlist" className="text-sm">
+                  Playlist to overwrite (its songs are replaced)
+                </label>
+                <select
+                  id="overwrite-playlist"
+                  value={overwriteHash}
+                  onChange={(e) => {
+                    setOverwriteHash(e.target.value);
+                    save.reset();
+                  }}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {ownPlaylists.map((p) => (
+                    <option key={p.hash} value={p.hash}>
+                      {`${p.name} (${p.songCount} ${
+                        p.songCount === 1 ? "song" : "songs"
+                      })`}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <>
+                <label htmlFor="playlist-name" className="text-sm">
+                  Playlist name
+                </label>
+                <Input
+                  id="playlist-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={100}
+                  required
+                />
+              </>
+            )}
             {save.error && (
               <p className="text-sm text-red-400">{save.error.message}</p>
             )}
@@ -207,14 +288,14 @@ export function SavePlaylistDialog({
                 type="submit"
                 disabled={
                   save.isPending ||
-                  !name.trim() ||
+                  (!overwriting && !name.trim()) ||
                   (!includePlayed && !includeQueued)
                 }
               >
                 {save.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Save
+                {overwriting ? "Overwrite" : "Save"}
               </Button>
             </div>
           </form>

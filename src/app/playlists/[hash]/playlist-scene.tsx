@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -40,7 +39,6 @@ export default function PlaylistScene({
 }: {
   playlist: Playlist;
 }) {
-  const router = useRouter();
   const utils = api.useUtils();
 
   // Kept fresh after every change, and when someone else edits it too.
@@ -52,6 +50,8 @@ export default function PlaylistScene({
   const songs = playlist.songs;
 
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Set once the playlist is deleted and the browser kept this tab open.
+  const [deleted, setDeleted] = useState(false);
   // Songs being removed right now, hidden at once.
   const [removing, setRemoving] = useState<Set<number>>(new Set());
 
@@ -107,6 +107,20 @@ export default function PlaylistScene({
     );
 
     moveMutation.mutate({ hash: playlist.hash, songId, toIndex: to });
+  }
+
+  if (deleted) {
+    return (
+      <main className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center gap-4 px-4 text-center text-white">
+        <h1 className="text-outline text-2xl font-extrabold">
+          {`“${playlist.name}” was deleted`}
+        </h1>
+        <p className="opacity-80">You can close this tab.</p>
+        <Link href="/" className="text-sm underline-offset-4 hover:underline">
+          Go to the home page
+        </Link>
+      </main>
+    );
   }
 
   return (
@@ -289,7 +303,13 @@ export default function PlaylistScene({
             deleteOpen ? { hash: playlist.hash, name: playlist.name } : null
           }
           onOpenChange={setDeleteOpen}
-          onDeleted={() => router.replace("/")}
+          onDeleted={() => {
+            // Browsers only let a page close a tab that a link or script
+            // opened (like the playlist links in Load playlist). If this tab
+            // is still here a moment later, say so instead.
+            window.close();
+            setTimeout(() => setDeleted(true), 300);
+          }}
         />
       </aside>
     </main>

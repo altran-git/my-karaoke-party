@@ -106,9 +106,65 @@ export type VideoInPlaylist = Omit<Video, "duration"> & {
 	duration: string | undefined;
 };
 
+/** One song that finished (or was skipped past) on the player screen. */
+export type HistoryEntry = {
+	id: string;
+	title: string;
+	coverUrl: string;
+	duration: string | undefined;
+	singerName: string;
+	playedAt: Date;
+};
+
 export type KaraokeParty = {
 	playlist: VideoInPlaylist[];
 	settings: KaraokePartySettings;
+	/**
+	 * Every song played at this party, oldest first. Unlike `playlist`, entries
+	 * stay here even when someone removes the song from the queue. Missing on
+	 * parties saved before this existed.
+	 */
+	history?: HistoryEntry[];
+};
+
+/** Most songs one playlist can hold, and one load can add to a party. */
+export const MAX_PLAYLIST_SONGS = 200;
+
+/** Most entries kept in a party's history; the oldest are dropped first. */
+export const MAX_HISTORY_ENTRIES = 500;
+
+export const PlaylistSongInput = z.object({
+	/** YouTube video id. */
+	id: z.string().regex(/^[a-zA-Z0-9_-]{11}$/),
+	title: z.string().min(1).max(300),
+	coverUrl: z.string().url().max(500),
+	duration: z.string().max(20).optional(),
+});
+
+export type PlaylistSongInput = z.infer<typeof PlaylistSongInput>;
+
+/** How a loaded playlist joins the queue. */
+export const LoadMode = z.enum(["append", "replace"]);
+
+export type LoadMode = z.infer<typeof LoadMode>;
+
+/**
+ * Body of POST /parties/main/:room?action=load-songs, sent only by the
+ * Next.js server after it has checked the host's key.
+ */
+export const LoadSongsRequest = z.object({
+	songs: z.array(PlaylistSongInput).max(MAX_PLAYLIST_SONGS),
+	mode: LoadMode,
+	/** Shown as the singer of every loaded song. */
+	singerName: z.string().min(1).max(50),
+});
+
+export type LoadSongsRequest = z.infer<typeof LoadSongsRequest>;
+
+export type LoadSongsResponse = {
+	added: number;
+	/** Songs left out because they were already waiting in the queue. */
+	skipped: number;
 };
 
 export type SettingsUpdate = {

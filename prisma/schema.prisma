@@ -32,3 +32,35 @@ model Party {
 
   @@index([hash])
 }
+
+/// A saved list of songs that a host can load into any party they host.
+/// Anyone with the link (its hash) can view and load it; editing needs the
+/// owner's recovery code.
+model Playlist {
+  id           Int            @id @default(autoincrement())
+  /// Random, unguessable public id used in the link /playlists/<hash>.
+  hash         String         @unique
+  name         String
+  /// SHA-256 of the owner's recovery code. The code itself is shown once.
+  ownerKeyHash String
+  /// Hash of the party the songs were saved from, if any.
+  sourceParty  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  songs        PlaylistSong[]
+}
+
+model PlaylistSong {
+  id         Int      @id @default(autoincrement())
+  playlistId Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  /// Order in the playlist, starting at 0.
+  position   Int
+  /// YouTube video id.
+  videoId    String
+  title      String
+  coverUrl   String
+  duration   String?
+
+  @@index([playlistId, position])
+}

@@ -10,6 +10,8 @@ import {
   getRecentParties,
   type RecentParty,
 } from "~/utils/recent-parties";
+import { rememberPlaylist } from "~/utils/saved-playlists";
+import { playlistUrl } from "./playlist-dialogs";
 import { Input } from "./ui/ui/input";
 import { Button } from "./ui/ui/button";
 
@@ -36,7 +38,9 @@ export function ExistingParties() {
     onError: (err) => setListError(err.message),
   });
 
-  function confirmDelete(p: RecentParty) {
+  const savePlaylist = api.playlist.saveFromParty.useMutation();
+
+  async function confirmDelete(p: RecentParty) {
     if (!p.hostKey) return;
     const ok = window.confirm(
       `Permanently delete "${p.name}"?\n\n` +
@@ -47,6 +51,45 @@ export function ExistingParties() {
     if (!ok) return;
 
     setListError(null);
+
+    // Deleting erases the list of songs sung, so offer to keep it first.
+    if (
+      window.confirm(
+        `Save the songs sung at "${p.name}" as a playlist before deleting?`,
+      )
+    ) {
+      try {
+        const playlist = await savePlaylist.mutateAsync({
+          partyHash: p.hash,
+          hostKey: p.hostKey,
+          name: `${p.name} ${new Date().toLocaleDateString()}`,
+        });
+        rememberPlaylist(playlist);
+        // A prompt, so the code can be selected and copied.
+        window.prompt(
+          `Saved "${playlist.name}" (${playlist.songCount} ` +
+            `${playlist.songCount === 1 ? "song" : "songs"}) at ` +
+            `${playlistUrl(playlist.hash)}\n\n` +
+            "This browser remembers it. To edit it from another browser, " +
+            "keep this recovery code:",
+          playlist.recoveryCode,
+        );
+      } catch (err) {
+        const code =
+          err && typeof err === "object" && "data" in err
+            ? (err.data as { code?: string } | undefined)?.code
+            : undefined;
+        // Nothing to save: go ahead and delete.
+        if (code !== "BAD_REQUEST" && code !== "NOT_FOUND") {
+          setListError(
+            "Couldn't save the songs, so the party wasn't deleted. " +
+              "Please try again.",
+          );
+          return;
+        }
+      }
+    }
+
     deleteParty.mutate({ hash: p.hash, hostKey: p.hostKey });
   }
 
@@ -132,8 +175,8 @@ export function ExistingParties() {
                   type="button"
                   aria-label={`Permanently delete ${p.name}`}
                   title="Permanently delete this party"
-                  disabled={deleteParty.isPending}
-                  onClick={() => confirmDelete(p)}
+                  disabled={deleteParty.isPending || savePlaylist.isPending}
+                  onClick={() => void confirmDelete(p)}
                   className="rounded p-1 text-red-300 opacity-70 hover:bg-white/10 hover:opacity-100 disabled:opacity-30"
                 >
                   <Trash2 className="h-4 w-4" />

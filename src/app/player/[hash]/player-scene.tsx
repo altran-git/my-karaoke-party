@@ -11,11 +11,13 @@ import { decode } from "html-entities";
 import {
   ChevronLeft,
   ChevronRight,
+  ListMusic,
   ListPlus,
   Maximize,
   Minimize,
   MoveDown,
   ListStart,
+  Save,
   SkipForward,
   X,
 } from "lucide-react";
@@ -32,7 +34,11 @@ import { env } from "~/env";
 import { cn } from "~/lib/utils";
 import { moveInQueue } from "~/utils/playlist";
 import { getUrl } from "~/utils/url";
-import { forgetParty, rememberParty } from "~/utils/recent-parties";
+import { forgetParty, getHostKey, rememberParty } from "~/utils/recent-parties";
+import {
+  LoadPlaylistDialog,
+  SavePlaylistDialog,
+} from "~/components/playlist-dialogs";
 
 type Props = {
   party: Omit<Party, "hostKeyHash">;
@@ -53,11 +59,18 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  // Only the browser that created the party has its key, and with it the
+  // playlist buttons.
+  const [hostKey, setHostKey] = useState<string | undefined>();
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [loadOpen, setLoadOpen] = useState(false);
+
   // Remember this party in this browser so the host can come back to it from
   // the start page.
   useEffect(() => {
     if (party.hash) {
       rememberParty({ hash: party.hash, name: party.name });
+      setHostKey(getHostKey(party.hash));
     }
   }, [party.hash, party.name]);
 
@@ -239,6 +252,42 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
               {party.hash}
             </span>
           </p>
+          {hostKey && party.hash && (
+            <>
+              <div className="mt-3 flex justify-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setLoadOpen(true)}
+                >
+                  <ListMusic className="mr-2 h-4 w-4" />
+                  Load playlist
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title="Save the songs sung so far as a playlist"
+                  onClick={() => setSaveOpen(true)}
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Save as playlist
+                </Button>
+              </div>
+              <LoadPlaylistDialog
+                open={loadOpen}
+                onOpenChange={setLoadOpen}
+                partyHash={party.hash}
+                hostKey={hostKey}
+              />
+              <SavePlaylistDialog
+                open={saveOpen}
+                onOpenChange={setSaveOpen}
+                partyHash={party.hash}
+                hostKey={hostKey}
+                defaultName={`${party.name} ${new Date().toLocaleDateString()}`}
+              />
+            </>
+          )}
         </div>
         <SongSearch
           key={party.hash}

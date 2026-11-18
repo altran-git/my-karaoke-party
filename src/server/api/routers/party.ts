@@ -1,18 +1,15 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { type Party, Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { log } from "next-axiom";
 import { z } from "zod";
 import { fetchPartyServer } from "~/server/party-server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { hashSecret, secretMatches } from "~/server/utils/secrets";
 import {
   normalizeCustomCode,
   validateCustomCode,
 } from "~/server/utils/sqids";
-
-function hashHostKey(hostKey: string) {
-  return createHash("sha256").update(hostKey).digest("hex");
-}
 
 /** The party without its host key hash, safe to send to any browser. */
 function toPublicParty({ hostKeyHash: _hostKeyHash, ...party }: Party) {
@@ -59,7 +56,7 @@ export const partyRouter = createTRPCRouter({
         party = await ctx.db.party.createWithHash({
           name: input.name,
           hash: customCode,
-          hostKeyHash: hashHostKey(hostKey),
+          hostKeyHash: hashSecret(hostKey),
         });
       } catch (e) {
         // Someone else took the same code between the check and the insert.
@@ -102,12 +99,7 @@ export const partyRouter = createTRPCRouter({
         return { deleted: true };
       }
 
-      const expected = Buffer.from(party.hostKeyHash ?? "", "hex");
-      const actual = Buffer.from(hashHostKey(input.hostKey), "hex");
-      if (
-        expected.length !== actual.length ||
-        !timingSafeEqual(expected, actual)
-      ) {
+      if (!secretMatches(party.hostKeyHash, input.hostKey)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Only the browser that started this party can delete it.",

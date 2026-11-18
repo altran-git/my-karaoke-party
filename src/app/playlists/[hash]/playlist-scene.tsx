@@ -68,103 +68,110 @@ export default function PlaylistScene({
   const visibleSongs = songs.filter((song) => !removing.has(song.songId));
 
   return (
-    <main className="mx-auto flex min-h-[100dvh] w-full max-w-2xl flex-col gap-6 px-4 py-8 text-white">
-      <header className="flex flex-col gap-2">
-        <Link href="/" className="text-sm opacity-70 hover:underline">
-          ← My Karaoke Party
-        </Link>
-        <h1 className="text-outline text-3xl font-extrabold tracking-tight">
-          {playlist.name}
-        </h1>
-        <div className="flex items-center gap-3 text-sm opacity-80">
-          <span>
-            {visibleSongs.length} {visibleSongs.length === 1 ? "song" : "songs"}
-          </span>
-          <CopyLinkButton url={playlistUrl(playlist.hash)} />
-        </div>
-      </header>
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col gap-6 px-4 py-8 text-white md:h-[100dvh] md:flex-row md:items-start md:py-0">
+      {/* Search on the left (below the playlist on narrow screens), scrolling
+          on its own so the song list stays in view. */}
+      <aside className="order-2 w-full md:order-none md:h-full md:basis-2/5 md:overflow-y-auto md:py-8">
+        <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
+          <h2 className="text-lg flex items-center gap-2 font-bold">
+            Add songs
+            {addSong.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          </h2>
+          <SongSearch
+            playlist={songs.map((song) => ({ id: song.id }))}
+            onVideoAdded={(id, title, coverUrl) =>
+              addSong.mutate({
+                hash: playlist.hash,
+                song: { id, title: title.trim(), coverUrl },
+              })
+            }
+          />
+        </section>
+      </aside>
 
-      <section>
-        <ol className="flex flex-col gap-2">
-          {visibleSongs.map((song, i) => (
-            <li
-              key={song.songId}
-              className="flex items-center gap-3 rounded-md bg-black/20 p-2"
-            >
-              <span className="w-6 shrink-0 text-right text-sm opacity-60">
-                {i + 1}
-              </span>
-              <Image
-                src={song.coverUrl}
-                alt=""
-                width={80}
-                height={45}
-                className="shrink-0 rounded object-cover"
-              />
-              <span className="min-w-0 flex-1 truncate">
-                {decode(song.title)}
-              </span>
-              {song.duration && (
-                <span className="shrink-0 text-sm opacity-60">
-                  {song.duration}
-                </span>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove ${decode(song.title)}`}
-                title="Remove from this playlist"
-                className="h-8 w-8 shrink-0 text-red-300 hover:text-red-200"
-                onClick={() => {
-                  setRemoving((current) => new Set(current).add(song.songId));
-                  removeSong.mutate({
-                    hash: playlist.hash,
-                    songId: song.songId,
-                  });
-                }}
+      <div className="order-1 flex w-full min-w-0 flex-col gap-6 md:order-none md:h-full md:basis-3/5 md:overflow-y-auto md:py-8">
+        <header className="flex flex-col gap-2">
+          <Link href="/" className="text-sm opacity-70 hover:underline">
+            ← My Karaoke Party
+          </Link>
+          <h1 className="text-outline text-3xl font-extrabold tracking-tight">
+            {playlist.name}
+          </h1>
+          <div className="flex items-center gap-3 text-sm opacity-80">
+            <span>
+              {visibleSongs.length}{" "}
+              {visibleSongs.length === 1 ? "song" : "songs"}
+            </span>
+            <CopyLinkButton url={playlistUrl(playlist.hash)} />
+          </div>
+        </header>
+
+        <section>
+          <ol className="flex flex-col gap-2">
+            {visibleSongs.map((song, i) => (
+              <li
+                key={song.songId}
+                className="flex items-center gap-3 rounded-md bg-black/20 p-2"
               >
-                <X className="h-4 w-4" />
-              </Button>
-            </li>
-          ))}
-        </ol>
-        {visibleSongs.length === 0 && (
-          <p className="text-sm opacity-80">
-            This playlist has no songs yet. Search below to add some.
-          </p>
-        )}
-      </section>
+                <span className="w-6 shrink-0 text-right text-sm opacity-60">
+                  {i + 1}
+                </span>
+                <Image
+                  src={song.coverUrl}
+                  alt=""
+                  width={80}
+                  height={45}
+                  className="shrink-0 rounded object-cover"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {decode(song.title)}
+                </span>
+                {song.duration && (
+                  <span className="shrink-0 text-sm opacity-60">
+                    {song.duration}
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove ${decode(song.title)}`}
+                  title="Remove from this playlist"
+                  className="h-8 w-8 shrink-0 text-red-300 hover:text-red-200"
+                  onClick={() => {
+                    setRemoving((current) => new Set(current).add(song.songId));
+                    removeSong.mutate({
+                      hash: playlist.hash,
+                      songId: song.songId,
+                    });
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </li>
+            ))}
+          </ol>
+          {visibleSongs.length === 0 && (
+            <p className="text-sm opacity-80">
+              This playlist has no songs yet. Search for songs to add some.
+            </p>
+          )}
+        </section>
 
-      <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
-        <h2 className="text-lg flex items-center gap-2 font-bold">
-          Add songs
-          {addSong.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-        </h2>
-        <SongSearch
-          playlist={songs.map((song) => ({ id: song.id }))}
-          onVideoAdded={(id, title, coverUrl) =>
-            addSong.mutate({
-              hash: playlist.hash,
-              song: { id, title: title.trim(), coverUrl },
-            })
-          }
+        <ManagePanel
+          hash={playlist.hash}
+          name={playlist.name}
+          onRenamed={() => void refresh()}
+          onDelete={() => setDeleteOpen(true)}
         />
-      </section>
-
-      <ManagePanel
-        hash={playlist.hash}
-        name={playlist.name}
-        onRenamed={() => void refresh()}
-        onDelete={() => setDeleteOpen(true)}
-      />
-      <DeletePlaylistDialog
-        playlist={
-          deleteOpen ? { hash: playlist.hash, name: playlist.name } : null
-        }
-        onOpenChange={setDeleteOpen}
-        onDeleted={() => router.replace("/")}
-      />
+        <DeletePlaylistDialog
+          playlist={
+            deleteOpen ? { hash: playlist.hash, name: playlist.name } : null
+          }
+          onOpenChange={setDeleteOpen}
+          onDeleted={() => router.replace("/")}
+        />
+      </div>
     </main>
   );
 }

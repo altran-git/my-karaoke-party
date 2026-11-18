@@ -162,6 +162,8 @@ export function SavePlaylistDialog({
   defaultName,
 }: PartyHostProps & { defaultName: string }) {
   const [name, setName] = useState(defaultName);
+  const [includePlayed, setIncludePlayed] = useState(true);
+  const [includeQueued, setIncludeQueued] = useState(true);
 
   const save = api.playlist.saveFromParty.useMutation({
     onSuccess: (playlist) => {
@@ -172,6 +174,8 @@ export function SavePlaylistDialog({
   useEffect(() => {
     if (open) {
       setName(defaultName);
+      setIncludePlayed(true);
+      setIncludeQueued(true);
       save.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,14 +216,43 @@ export function SavePlaylistDialog({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                save.mutate({ partyHash, hostKey, name });
+                save.mutate({
+                  partyHash,
+                  hostKey,
+                  name,
+                  includePlayed,
+                  includeQueued,
+                });
               }}
               className="flex flex-col gap-3"
             >
-              <p className="text-sm text-muted-foreground">
-                Every song sung at this party so far, in the order they were
-                played. Each song is saved once.
-              </p>
+              <fieldset className="flex flex-col gap-2 text-sm">
+                <legend className="mb-1 text-muted-foreground">
+                  Songs to save (each song is saved once)
+                </legend>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={includePlayed}
+                    onChange={(e) => {
+                      setIncludePlayed(e.target.checked);
+                      save.reset();
+                    }}
+                  />
+                  Songs already sung, in the order they were played
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={includeQueued}
+                    onChange={(e) => {
+                      setIncludeQueued(e.target.checked);
+                      save.reset();
+                    }}
+                  />
+                  Songs in the queue, including the one playing now
+                </label>
+              </fieldset>
               <label htmlFor="playlist-name" className="text-sm">
                 Playlist name
               </label>
@@ -239,7 +272,14 @@ export function SavePlaylistDialog({
                     Cancel
                   </Button>
                 </Dialog.Close>
-                <Button type="submit" disabled={save.isPending || !name.trim()}>
+                <Button
+                  type="submit"
+                  disabled={
+                    save.isPending ||
+                    !name.trim() ||
+                    (!includePlayed && !includeQueued)
+                  }
+                >
                   {save.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}

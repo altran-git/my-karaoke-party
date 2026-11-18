@@ -55,7 +55,8 @@ export function ExistingParties() {
     // Deleting erases the list of songs sung, so offer to keep it first.
     if (
       window.confirm(
-        `Save the songs sung at "${p.name}" as a playlist before deleting?`,
+        `Save the songs of "${p.name}" (the ones sung and the ones still ` +
+          "in the queue) as a playlist before deleting?",
       )
     ) {
       try {

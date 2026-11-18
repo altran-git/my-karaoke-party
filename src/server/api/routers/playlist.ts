@@ -230,7 +230,21 @@ export const playlistRouter = createTRPCRouter({
 
   /** Saves the songs played so far at a party as a new playlist. */
   saveFromParty: publicProcedure
-    .input(z.object({ partyHash: Hash, hostKey: Secret, name: PlaylistName }))
+    .input(
+      z
+        .object({
+          partyHash: Hash,
+          hostKey: Secret,
+          name: PlaylistName,
+          /** Songs already sung, in the order they were played. */
+          includePlayed: z.boolean().default(true),
+          /** Songs still waiting, in queue order (the one on screen first). */
+          includeQueued: z.boolean().default(true),
+        })
+        .refine((input) => input.includePlayed || input.includeQueued, {
+          message: "Pick songs already sung, songs in the queue, or both.",
+        }),
+    )
     .mutation(async ({ ctx, input }) => {
       const party = await requirePartyHost(
         ctx.db,
@@ -261,20 +275,27 @@ export const playlistRouter = createTRPCRouter({
 
       // Parties from before the history log only have the played songs that
       // are still in the queue.
-      const played = karaokeParty.history?.length
-        ? karaokeParty.history
-        : karaokeParty.playlist
-            .filter((v) => v.playedAt)
-            .sort(
-              (a, b) =>
-                new Date(a.playedAt!).getTime() -
-                new Date(b.playedAt!).getTime(),
-            );
+      const played = !input.includePlayed
+        ? []
+        : karaokeParty.history?.length
+          ? karaokeParty.history
+          : karaokeParty.playlist
+              .filter((v) => v.playedAt)
+              .sort(
+                (a, b) =>
+                  new Date(a.playedAt!).getTime() -
+                  new Date(b.playedAt!).getTime(),
+              );
 
-      // Each song once, in the order it was first sung.
+      const queued = input.includeQueued
+        ? karaokeParty.playlist.filter((v) => !v.playedAt)
+        : [];
+
+      // Each song once: first the songs sung, in the order they were played,
+      // then the queue in its current order.
       const seen = new Set<string>();
       const songs: PlaylistSongInput[] = [];
-      for (const video of played) {
+      for (const video of [...played, ...queued]) {
         if (seen.has(video.id)) continue;
         seen.add(video.id);
 
@@ -291,7 +312,11 @@ export const playlistRouter = createTRPCRouter({
       if (songs.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "No songs have been played at this party yet.",
+          message: !input.includeQueued
+            ? "No songs have been played at this party yet."
+            : !input.includePlayed
+              ? "There are no songs in the queue."
+              : "This party has no songs to save yet.",
         });
       }
 

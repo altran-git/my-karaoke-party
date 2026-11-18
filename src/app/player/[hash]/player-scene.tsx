@@ -266,7 +266,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                 <Button
                   variant="secondary"
                   size="sm"
-                  title="Save the songs sung so far as a playlist"
+                  title="Save the songs sung so far and the queue as a playlist"
                   onClick={() => setSaveOpen(true)}
                 >
                   <Save className="mr-2 h-4 w-4" />

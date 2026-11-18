@@ -176,6 +176,7 @@ export const playlistRouter = createTRPCRouter({
         loadCount: playlist.loadCount,
         lastLoadedAt: playlist.lastLoadedAt,
         lastLoadedParty: playlist.lastLoadedParty,
+        lastLoadedPartyName: playlist.lastLoadedPartyName,
         songs: playlist.songs.map((s) => ({
           /** This entry in the playlist, for removeSong. */
           songId: s.id,
@@ -724,7 +725,8 @@ export const playlistRouter = createTRPCRouter({
         UPDATE "Playlist"
         SET "loadCount" = "loadCount" + 1,
             "lastLoadedAt" = now() AT TIME ZONE 'UTC',
-            "lastLoadedParty" = ${party.hash}
+            "lastLoadedParty" = ${party.hash},
+            "lastLoadedPartyName" = ${party.name}
         WHERE id = ${playlist.id}`;
 
       log.info("Playlist loaded into party", {

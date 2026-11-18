@@ -330,7 +330,12 @@ function ManagePanel({
   name: string;
   stats: Pick<
     Playlist,
-    "loadCount" | "lastLoadedAt" | "lastLoadedParty" | "updatedAt" | "createdAt"
+    | "loadCount"
+    | "lastLoadedAt"
+    | "lastLoadedParty"
+    | "lastLoadedPartyName"
+    | "updatedAt"
+    | "createdAt"
   >;
   onRenamed: (name: string) => void;
   onDelete: () => void;
@@ -341,7 +346,11 @@ function ManagePanel({
       `${stats.loadCount} ${stats.loadCount === 1 ? "time" : "times"}`,
     ],
     ["Last loaded", formatDate(stats.lastLoadedAt)],
-    ["Last party", stats.lastLoadedParty ?? "None yet"],
+    // Loads from before party names were kept only have the code.
+    [
+      "Last party",
+      stats.lastLoadedPartyName ?? stats.lastLoadedParty ?? "None yet",
+    ],
     ["Last modified", formatDate(stats.updatedAt)],
     ["Created", formatDate(stats.createdAt)],
   ];

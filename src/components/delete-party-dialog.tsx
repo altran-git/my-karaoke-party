@@ -57,6 +57,8 @@ export function DeletePartyDialog({
         playlist = await savePlaylist.mutateAsync({
           partyHash: party.hash,
           name: `${party.name} ${new Date().toLocaleDateString()}`,
+          // Don't fail the delete over a name clash: add " (2)" etc.
+          suffixIfTaken: true,
         });
       } catch (err) {
         const code = errorCode(err);

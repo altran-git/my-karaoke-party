@@ -37,7 +37,29 @@ function toSongRows(songs: PlaylistSongInput[]) {
   }));
 }
 
-/** Creates a playlist with a fresh random link. */
+/** Whether another playlist already has this name, ignoring capitals. */
+async function nameTaken(db: typeof Db, name: string, exceptId?: number) {
+  const other = await db.playlist.findFirst({
+    where: {
+      name: { equals: name.trim(), mode: "insensitive" },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+    select: { id: true },
+  });
+  return !!other;
+}
+
+function nameTakenError(name: string) {
+  return new TRPCError({
+    code: "CONFLICT",
+    message: `A playlist named “${name.trim()}” already exists. Please pick another name.`,
+  });
+}
+
+/**
+ * Creates a playlist with a fresh random link. Its name must be unused;
+ * with `suffixIfTaken`, " (2)", " (3)"... is added instead of refusing.
+ */
 async function createPlaylist(
   db: typeof Db,
   data: {
@@ -45,15 +67,25 @@ async function createPlaylist(
     songs: PlaylistSongInput[];
     sourceParty?: string;
     hostKeyHash?: string | null;
+    suffixIfTaken?: boolean;
   },
 ) {
+  let name = data.name.trim();
+  if (await nameTaken(db, name)) {
+    if (!data.suffixIfTaken) throw nameTakenError(name);
+
+    let n = 2;
+    while (await nameTaken(db, `${name} (${n})`)) n++;
+    name = `${name} (${n})`;
+  }
+
   // The hash is random, so a clash is all but impossible; retry just in case.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const playlist = await db.playlist.create({
         data: {
           hash: generatePlaylistHash(),
-          name: data.name,
+          name,
           sourceParty: data.sourceParty,
           hostKeyHash: data.hostKeyHash ?? null,
           songs: { create: toSongRows(data.songs) },
@@ -140,13 +172,151 @@ export const playlistRouter = createTRPCRouter({
         name: playlist.name,
         createdAt: playlist.createdAt,
         updatedAt: playlist.updatedAt,
+        sourceParty: playlist.sourceParty,
+        loadCount: playlist.loadCount,
+        lastLoadedAt: playlist.lastLoadedAt,
+        lastLoadedParty: playlist.lastLoadedParty,
+        lastLoadedPartyName: playlist.lastLoadedPartyName,
         songs: playlist.songs.map((s) => ({
+          /** This entry in the playlist, for removeSong. */
+          songId: s.id,
           id: s.videoId,
           title: s.title,
           coverUrl: s.coverUrl,
           duration: s.duration ?? undefined,
         })),
       };
+    }),
+
+  /**
+   * Adds a song to the end of a playlist. Anyone with the link can. A song
+   * already in the playlist isn't added twice.
+   */
+  addSong: publicProcedure
+    .input(z.object({ hash: Hash, song: PlaylistSongInput }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        const playlist = await tx.playlist.findUnique({
+          where: { hash: input.hash },
+          select: { id: true, _count: { select: { songs: true } } },
+        });
+        if (!playlist) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Playlist not found.",
+          });
+        }
+        if (playlist._count.songs >= MAX_PLAYLIST_SONGS) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `A playlist can have at most ${MAX_PLAYLIST_SONGS} songs.`,
+          });
+        }
+
+        const existing = await tx.playlistSong.findFirst({
+          where: { playlistId: playlist.id, videoId: input.song.id },
+          select: { id: true },
+        });
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "That song is already in this playlist.",
+          });
+        }
+
+        const last = await tx.playlistSong.aggregate({
+          where: { playlistId: playlist.id },
+          _max: { position: true },
+        });
+        const [row] = toSongRows([input.song]);
+        await tx.playlistSong.create({
+          data: {
+            ...row!,
+            position: (last._max.position ?? -1) + 1,
+            playlistId: playlist.id,
+          },
+        });
+        await tx.playlist.update({
+          where: { id: playlist.id },
+          data: { updatedAt: new Date() },
+        });
+
+        return { added: true };
+      });
+    }),
+
+  /**
+   * Moves one song to `toIndex` (0 is the top) and renumbers the playlist.
+   * Anyone with the link can. Works from the order saved right now, so
+   * people reordering at once can't leave the list scrambled.
+   */
+  moveSong: publicProcedure
+    .input(
+      z.object({
+        hash: Hash,
+        songId: z.number().int(),
+        toIndex: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        // Lock the playlist row first, so concurrent moves run one after
+        // another and each reads the order the previous one saved.
+        const locked = await tx.playlist.updateMany({
+          where: { hash: input.hash },
+          data: { updatedAt: new Date() },
+        });
+        if (locked.count === 0) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Playlist not found.",
+          });
+        }
+
+        const songs = await tx.playlistSong.findMany({
+          where: { playlist: { hash: input.hash } },
+          orderBy: [{ position: "asc" }, { id: "asc" }],
+          select: { id: true },
+        });
+
+        const order = songs.map((song) => song.id);
+        const from = order.indexOf(input.songId);
+        // Removed by someone else in the meantime: nothing to move.
+        if (from === -1) return { moved: false };
+
+        const to = Math.min(input.toIndex, order.length - 1);
+        if (from === to) return { moved: false };
+
+        order.splice(from, 1);
+        order.splice(to, 0, input.songId);
+
+        // Renumber every song 0, 1, 2... in one statement.
+        await tx.$executeRaw`
+          UPDATE "PlaylistSong" AS s
+          SET "position" = (v.pos - 1)::int
+          FROM unnest(${order}::int[]) WITH ORDINALITY AS v(id, pos)
+          WHERE s.id = v.id`;
+
+        return { moved: true };
+      });
+    }),
+
+  /** Removes one song from a playlist. Anyone with the link can. */
+  removeSong: publicProcedure
+    .input(z.object({ hash: Hash, songId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      // Matched on both, so a song can only be removed from its own
+      // playlist. Already gone (someone else removed it) isn't an error.
+      const { count } = await ctx.db.playlistSong.deleteMany({
+        where: { id: input.songId, playlist: { hash: input.hash } },
+      });
+      if (count > 0) {
+        await ctx.db.playlist.update({
+          where: { hash: input.hash },
+          data: { updatedAt: new Date() },
+        });
+      }
+      return { removed: count > 0 };
     }),
 
   /**
@@ -227,7 +397,7 @@ export const playlistRouter = createTRPCRouter({
       return created;
     }),
 
-  /** Renames the playlist and/or replaces its songs. Anyone can do this. */
+  /** Renames the playlist. Anyone can do this. */
   update: publicProcedure
     .input(z.object({ hash: Hash, name: PlaylistName }))
     .mutation(async ({ ctx, input }) => {
@@ -239,6 +409,10 @@ export const playlistRouter = createTRPCRouter({
           code: "NOT_FOUND",
           message: "Playlist not found.",
         });
+      }
+
+      if (await nameTaken(ctx.db, input.name, playlist.id)) {
+        throw nameTakenError(input.name);
       }
 
       await ctx.db.playlist.update({
@@ -289,6 +463,11 @@ export const playlistRouter = createTRPCRouter({
            */
           overwriteHash: Hash.optional(),
           hostKey: Secret.optional(),
+          /**
+           * If the name is taken, add " (2)" etc. instead of refusing. Used
+           * when saving automatically before deleting a party.
+           */
+          suffixIfTaken: z.boolean().default(false),
           /** Songs already sung, in the order they were played. */
           includePlayed: z.boolean().default(true),
           /** Songs still waiting, in queue order (the one on screen first). */
@@ -420,6 +599,7 @@ export const playlistRouter = createTRPCRouter({
         songs,
         sourceParty: party.hash,
         hostKeyHash: party.hostKeyHash,
+        suffixIfTaken: input.suffixIfTaken,
       });
 
       log.info("Playlist saved from party", {
@@ -539,6 +719,15 @@ export const playlistRouter = createTRPCRouter({
           message: "Couldn't load the playlist. Please try again.",
         });
       }
+
+      // Raw SQL, so loading doesn't count as a change (updatedAt).
+      await ctx.db.$executeRaw`
+        UPDATE "Playlist"
+        SET "loadCount" = "loadCount" + 1,
+            "lastLoadedAt" = now() AT TIME ZONE 'UTC',
+            "lastLoadedParty" = ${party.hash},
+            "lastLoadedPartyName" = ${party.name}
+        WHERE id = ${playlist.id}`;
 
       log.info("Playlist loaded into party", {
         party: party.hash,

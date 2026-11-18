@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   DeletePlaylistDialog,
@@ -340,7 +340,6 @@ function CopyLinkButton({ url }: { url: string }) {
   );
 }
 
-/** Rename and delete. Anyone can do both. */
 /** Like "Nov 18, 9:00 AM", with the year only when it isn't this year. */
 function formatDate(date: Date | string | null | undefined) {
   if (!date) return "Never";
@@ -378,19 +377,27 @@ function ManagePanel({
   onDelete: () => void;
   onExport: () => void;
 }) {
+  // Dates are shown in the viewer's time zone, which the server (in UTC)
+  // doesn't know, so they're only formatted once the page runs in the
+  // browser. Formatting them on the server showed UTC times.
+  const [inBrowser, setInBrowser] = useState(false);
+  useEffect(() => setInBrowser(true), []);
+  const date = (value: Date | string | null | undefined) =>
+    inBrowser ? formatDate(value) : "…";
+
   const rows: [string, string][] = [
     [
       "Loaded",
       `${stats.loadCount} ${stats.loadCount === 1 ? "time" : "times"}`,
     ],
-    ["Last loaded", formatDate(stats.lastLoadedAt)],
+    ["Last loaded", date(stats.lastLoadedAt)],
     // Loads from before party names were kept only have the code.
     [
       "Last party",
       stats.lastLoadedPartyName ?? stats.lastLoadedParty ?? "None yet",
     ],
-    ["Last modified", formatDate(stats.updatedAt)],
-    ["Created", formatDate(stats.createdAt)],
+    ["Last modified", date(stats.updatedAt)],
+    ["Created", date(stats.createdAt)],
   ];
 
   const [newName, setNewName] = useState(name);
@@ -411,11 +418,7 @@ function ManagePanel({
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
             <dt className="opacity-70">{label}</dt>
-            {/* Dates are shown in the viewer's time zone, which the server
-                can't know, so the first render may differ from the server's. */}
-            <dd suppressHydrationWarning className="break-words">
-              {value}
-            </dd>
+            <dd className="break-words">{value}</dd>
           </div>
         ))}
       </dl>

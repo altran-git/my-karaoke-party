@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDebouncedValue } from "@mantine/hooks";
-import { Check, Copy, ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -43,23 +43,6 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     >
       {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
     </Button>
-  );
-}
-
-/** Link of a playlist that was just created. */
-export function NewPlaylistDetails({ hash }: { hash: string }) {
-  const url = playlistUrl(hash);
-
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-sm text-muted-foreground">
-        Anyone can now find it under Load playlist. This link opens it directly.
-      </span>
-      <div className="flex items-center gap-2">
-        <Input readOnly value={url} className="text-xs font-mono" />
-        <CopyButton text={url} label="Copy link" />
-      </div>
-    </div>
   );
 }
 
@@ -132,8 +115,14 @@ export function SavePlaylistDialog({
 
   const utils = api.useUtils();
   const save = api.playlist.saveFromParty.useMutation({
-    onSuccess: () => {
+    onSuccess: (playlist) => {
       void utils.playlist.list.invalidate();
+      toast.success(
+        `Saved “${playlist.name}” (${playlist.songCount} ${
+          playlist.songCount === 1 ? "song" : "songs"
+        }).`,
+      );
+      onOpenChange(false);
     },
   });
 
@@ -153,103 +142,82 @@ export function SavePlaylistDialog({
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/70" />
         <Dialog.Content aria-describedby={undefined} className={CONTENT_CLASS}>
           <Dialog.Title className="text-lg mb-4 font-semibold">
-            {save.data ? "Playlist saved" : "Save songs as a playlist"}
+            Save songs as a playlist
           </Dialog.Title>
 
-          {save.data ? (
-            <>
-              <p className="mb-4 text-sm">
-                {`“${save.data.name}” has ${save.data.songCount} ${
-                  save.data.songCount === 1 ? "song" : "songs"
-                }.`}
-              </p>
-              <NewPlaylistDetails hash={save.data.hash} />
-              <div className="mt-5 flex justify-end gap-2">
-                <Button variant="outline" asChild>
-                  <Link href={`/playlists/${save.data.hash}`} target="_blank">
-                    Open <ExternalLink className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-                <Dialog.Close asChild>
-                  <Button>Done</Button>
-                </Dialog.Close>
-              </div>
-            </>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                save.mutate({
-                  partyHash,
-                  name,
-                  includePlayed,
-                  includeQueued,
-                });
-              }}
-              className="flex flex-col gap-3"
-            >
-              <fieldset className="flex flex-col gap-2 text-sm">
-                <legend className="mb-1 text-muted-foreground">
-                  Songs to save (each song is saved once)
-                </legend>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={includePlayed}
-                    onChange={(e) => {
-                      setIncludePlayed(e.target.checked);
-                      save.reset();
-                    }}
-                  />
-                  Songs already sung, in the order they were played
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={includeQueued}
-                    onChange={(e) => {
-                      setIncludeQueued(e.target.checked);
-                      save.reset();
-                    }}
-                  />
-                  Songs in the queue, including the one playing now
-                </label>
-              </fieldset>
-              <label htmlFor="playlist-name" className="text-sm">
-                Playlist name
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate({
+                partyHash,
+                name,
+                includePlayed,
+                includeQueued,
+              });
+            }}
+            className="flex flex-col gap-3"
+          >
+            <fieldset className="flex flex-col gap-2 text-sm">
+              <legend className="mb-1 text-muted-foreground">
+                Songs to save (each song is saved once)
+              </legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includePlayed}
+                  onChange={(e) => {
+                    setIncludePlayed(e.target.checked);
+                    save.reset();
+                  }}
+                />
+                Songs already sung, in the order they were played
               </label>
-              <Input
-                id="playlist-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={100}
-                required
-              />
-              {save.error && (
-                <p className="text-sm text-red-400">{save.error.message}</p>
-              )}
-              <div className="mt-2 flex justify-end gap-2">
-                <Dialog.Close asChild>
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </Dialog.Close>
-                <Button
-                  type="submit"
-                  disabled={
-                    save.isPending ||
-                    !name.trim() ||
-                    (!includePlayed && !includeQueued)
-                  }
-                >
-                  {save.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Save
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includeQueued}
+                  onChange={(e) => {
+                    setIncludeQueued(e.target.checked);
+                    save.reset();
+                  }}
+                />
+                Songs in the queue, including the one playing now
+              </label>
+            </fieldset>
+            <label htmlFor="playlist-name" className="text-sm">
+              Playlist name
+            </label>
+            <Input
+              id="playlist-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              required
+            />
+            {save.error && (
+              <p className="text-sm text-red-400">{save.error.message}</p>
+            )}
+            <div className="mt-2 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button type="button" variant="outline">
+                  Cancel
                 </Button>
-              </div>
-            </form>
-          )}
+              </Dialog.Close>
+              <Button
+                type="submit"
+                disabled={
+                  save.isPending ||
+                  !name.trim() ||
+                  (!includePlayed && !includeQueued)
+                }
+              >
+                {save.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Save
+              </Button>
+            </div>
+          </form>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

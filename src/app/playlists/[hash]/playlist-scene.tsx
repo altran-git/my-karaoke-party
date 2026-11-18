@@ -216,6 +216,7 @@ export default function PlaylistScene({
                   alt=""
                   width={80}
                   height={45}
+                  unoptimized
                   draggable={false}
                   className="shrink-0 rounded object-cover"
                 />

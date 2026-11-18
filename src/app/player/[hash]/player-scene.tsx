@@ -465,6 +465,7 @@ export default function PlayerScene({
                         <Image
                           src={v.coverUrl}
                           fill={true}
+                          unoptimized
                           className="pointer-events-none rounded-lg hover:opacity-50"
                           alt="Cover"
                         />

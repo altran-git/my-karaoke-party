@@ -64,7 +64,7 @@ export function ExistingParties() {
         setError("No party found with that code.");
         return;
       }
-      router.push(`/player/${party.hash}`);
+      router.push(`/player/${party.hash}?rejoin=1`);
     } catch {
       setError("Couldn't look up that code. Please try again.");
     } finally {
@@ -103,7 +103,7 @@ export function ExistingParties() {
           {recent.map((p) => (
             <li key={p.hash} className="flex items-center gap-2">
               <Link
-                href={`/player/${p.hash}`}
+                href={`/player/${p.hash}?rejoin=1`}
                 className="flex min-w-0 flex-1 items-center rounded px-2 py-1 hover:bg-white/10"
               >
                 <span className="truncate">{p.name}</span>

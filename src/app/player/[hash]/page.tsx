@@ -6,6 +6,7 @@ import PlayerScene from "./player-scene";
 
 type Props = {
   params: { hash: string };
+  searchParams?: { rejoin?: string };
 };
 
 export async function generateMetadata({ params }: Props) {
@@ -22,7 +23,9 @@ export async function generateMetadata({ params }: Props) {
   };
 }
 
-export default async function PartyPage({ params }: Props) {
+export default async function PartyPage({ params, searchParams }: Props) {
+  const rejoined = searchParams?.rejoin === "1";
+
   const party = await api.party.getByHash({ hash: params.hash });
 
   if (!party?.hash) {
@@ -31,7 +34,7 @@ export default async function PartyPage({ params }: Props) {
 
   // The code may have been typed with different capitals or spaces.
   if (party.hash !== params.hash) {
-    redirect(`/player/${party.hash}`);
+    redirect(`/player/${party.hash}${rejoined ? "?rejoin=1" : ""}`);
   }
 
   const partyKitRes = await fetchPartyServer(party.hash, {
@@ -51,5 +54,11 @@ export default async function PartyPage({ params }: Props) {
 
   const playlist = (await partyKitRes.json()) as KaraokeParty;
 
-  return <PlayerScene party={party} initialPlaylist={playlist} />;
+  return (
+    <PlayerScene
+      party={party}
+      initialPlaylist={playlist}
+      rejoined={rejoined}
+    />
+  );
 }

@@ -164,8 +164,9 @@ export class KaraokeServer extends Server<Env> {
 			}
 
 			case "remove-video": {
+				// Played songs stay in the playlist, so match only the queued copy.
 				const index = this.karaokeParty.playlist.findIndex(
-					(video) => video.id === data.id,
+					(video) => video.id === data.id && !video.playedAt,
 				);
 
 				if (index !== -1) {

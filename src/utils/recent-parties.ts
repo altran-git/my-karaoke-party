@@ -71,3 +71,8 @@ export function rememberParty(party: {
 export function forgetParty(hash: string) {
   saveRecentParties(getRecentParties().filter((p) => p.hash !== hash));
 }
+
+/** The host key for a party this browser created, if it has one. */
+export function getHostKey(hash: string) {
+  return getRecentParties().find((p) => p.hash === hash)?.hostKey;
+}

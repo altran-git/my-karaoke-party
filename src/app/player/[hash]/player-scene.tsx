@@ -11,11 +11,13 @@ import { decode } from "html-entities";
 import {
   ChevronLeft,
   ChevronRight,
+  ListMusic,
   ListPlus,
   Maximize,
   Minimize,
   MoveDown,
   ListStart,
+  Save,
   SkipForward,
   X,
 } from "lucide-react";
@@ -32,7 +34,13 @@ import { env } from "~/env";
 import { cn } from "~/lib/utils";
 import { moveInQueue } from "~/utils/playlist";
 import { getUrl } from "~/utils/url";
-import { forgetParty, rememberParty } from "~/utils/recent-parties";
+import { forgetParty, getHostKey, rememberParty } from "~/utils/recent-parties";
+import {
+  HostCodeDialog,
+  LoadPlaylistDialog,
+  SavePlaylistDialog,
+  UnlockHostDialog,
+} from "~/components/playlist-dialogs";
 
 type Props = {
   party: Omit<Party, "hostKeyHash">;
@@ -53,11 +61,21 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  // The host PIN proves this browser hosts the party, which loading a
+  // playlist needs. The browser that created the party has it; any other
+  // browser gets it by typing the PIN.
+  const [hostKey, setHostKey] = useState<string | undefined>();
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [loadOpen, setLoadOpen] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [hostCodeOpen, setHostCodeOpen] = useState(false);
+
   // Remember this party in this browser so the host can come back to it from
   // the start page.
   useEffect(() => {
     if (party.hash) {
       rememberParty({ hash: party.hash, name: party.name });
+      setHostKey(getHostKey(party.hash));
     }
   }, [party.hash, party.name]);
 
@@ -239,6 +257,72 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
               {party.hash}
             </span>
           </p>
+          {party.hash && (
+            <>
+              <div className="mt-3 flex justify-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    hostKey ? setLoadOpen(true) : setUnlockOpen(true)
+                  }
+                >
+                  <ListMusic className="mr-2 h-4 w-4" />
+                  Load playlist
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title="Save the songs sung so far and the queue as a playlist"
+                  onClick={() => setSaveOpen(true)}
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Save as playlist
+                </Button>
+              </div>
+              {hostKey && (
+                <button
+                  type="button"
+                  className="text-xs mt-2 text-slate-300 underline-offset-4 hover:underline"
+                  onClick={() => setHostCodeOpen(true)}
+                >
+                  {/^\d{4}$/.test(hostKey) ? "Host PIN" : "Host code"}
+                </button>
+              )}
+              {hostKey && (
+                <>
+                  <LoadPlaylistDialog
+                    open={loadOpen}
+                    onOpenChange={setLoadOpen}
+                    partyHash={party.hash}
+                    hostKey={hostKey}
+                  />
+                  <HostCodeDialog
+                    open={hostCodeOpen}
+                    onOpenChange={setHostCodeOpen}
+                    hostKey={hostKey}
+                  />
+                </>
+              )}
+              <UnlockHostDialog
+                open={unlockOpen}
+                onOpenChange={setUnlockOpen}
+                partyHash={party.hash}
+                partyName={party.name}
+                onUnlocked={(key) => {
+                  setHostKey(key);
+                  setUnlockOpen(false);
+                  setLoadOpen(true);
+                }}
+              />
+              <SavePlaylistDialog
+                open={saveOpen}
+                onOpenChange={setSaveOpen}
+                partyHash={party.hash}
+                defaultName={`${party.name} ${new Date().toLocaleDateString()}`}
+              />
+            </>
+          )}
         </div>
         <SongSearch
           key={party.hash}

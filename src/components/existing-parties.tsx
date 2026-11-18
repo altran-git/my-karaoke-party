@@ -10,6 +10,7 @@ import {
   getRecentParties,
   type RecentParty,
 } from "~/utils/recent-parties";
+import { DeletePartyDialog } from "./delete-party-dialog";
 import { Input } from "./ui/ui/input";
 import { Button } from "./ui/ui/button";
 
@@ -26,29 +27,9 @@ export function ExistingParties() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
 
-  const deleteParty = api.party.delete.useMutation({
-    onSuccess: (_data, { hash }) => {
-      forgetParty(hash);
-      setRecent(getRecentParties());
-    },
-    onError: (err) => setListError(err.message),
-  });
-
-  function confirmDelete(p: RecentParty) {
-    if (!p.hostKey) return;
-    const ok = window.confirm(
-      `Permanently delete "${p.name}"?\n\n` +
-        "The song queue is erased, anyone still connected is sent back to " +
-        "the start page, and the party code can be used again. " +
-        "This can't be undone.",
-    );
-    if (!ok) return;
-
-    setListError(null);
-    deleteParty.mutate({ hash: p.hash, hostKey: p.hostKey });
-  }
+  // The party whose delete dialog is open.
+  const [toDelete, setToDelete] = useState<RecentParty | null>(null);
 
   function removeFromList(p: RecentParty) {
     if (
@@ -132,8 +113,7 @@ export function ExistingParties() {
                   type="button"
                   aria-label={`Permanently delete ${p.name}`}
                   title="Permanently delete this party"
-                  disabled={deleteParty.isPending}
-                  onClick={() => confirmDelete(p)}
+                  onClick={() => setToDelete(p)}
                   className="rounded p-1 text-red-300 opacity-70 hover:bg-white/10 hover:opacity-100 disabled:opacity-30"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -153,7 +133,16 @@ export function ExistingParties() {
         </ul>
       )}
 
-      {listError && <p className="text-sm text-red-300">{listError}</p>}
+      <DeletePartyDialog
+        party={toDelete}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setToDelete(null);
+        }}
+        onDeleted={(hash) => {
+          forgetParty(hash);
+          setRecent(getRecentParties());
+        }}
+      />
 
       <form onSubmit={openByCode} className="flex flex-col gap-1">
         <label htmlFor="party-code" className="text-sm opacity-80">

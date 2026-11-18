@@ -8,6 +8,10 @@ import {
 import { moveInQueue } from "~/utils/playlist";
 import {
 	type KaraokeParty,
+	LoadSongsRequest,
+	type LoadSongsResponse,
+	MAX_HISTORY_ENTRIES,
+	MAX_PLAYLIST_SONGS,
 	Message,
 	type PartyDeleted,
 	type PlaybackCommand,
@@ -251,6 +255,21 @@ export class KaraokeServer extends Server<Env> {
 				if (video) {
 					video.playedAt = new Date();
 
+					// Log it where removing the song from the queue can't erase it,
+					// so the host can later save the party's songs as a playlist.
+					const history = (this.karaokeParty.history ??= []);
+					history.push({
+						id: video.id,
+						title: video.title,
+						coverUrl: video.coverUrl,
+						duration: video.duration,
+						singerName: video.singerName,
+						playedAt: video.playedAt,
+					});
+					if (history.length > MAX_HISTORY_ENTRIES) {
+						history.splice(0, history.length - MAX_HISTORY_ENTRIES);
+					}
+
 					// A song finished: everyone who postponed gets a fresh turn.
 					for (const v of this.karaokeParty.playlist) {
 						if (!v.playedAt) {
@@ -316,6 +335,12 @@ export class KaraokeServer extends Server<Env> {
 			return new Response(null, { status: 204 });
 		}
 
+		const action = new URL(req.url).searchParams.get("action");
+
+		if (req.method === "POST" && action === "load-songs") {
+			return this.loadSongs(req);
+		}
+
 		if (req.method === "POST" && !this.karaokeParty) {
 			console.log("Creating new karaoke party");
 
@@ -337,6 +362,86 @@ export class KaraokeServer extends Server<Env> {
 		}
 
 		return new Response("Party not found =(", { status: 404 });
+	}
+
+	/**
+	 * Adds a saved playlist's songs to the queue. Only the Next.js server calls
+	 * this (it checks the host's key first), so guests can't load playlists.
+	 */
+	async loadSongs(req: Request): Promise<Response> {
+		if (!this.karaokeParty) {
+			return new Response("Party not found =(", { status: 404 });
+		}
+
+		let body: unknown;
+		try {
+			body = await req.json();
+		} catch {
+			return new Response("Invalid JSON", { status: 400 });
+		}
+
+		const parsed = LoadSongsRequest.safeParse(body);
+		if (!parsed.success) {
+			return new Response("Invalid request", { status: 400 });
+		}
+
+		const { songs, mode, singerName } = parsed.data;
+		const party = this.karaokeParty;
+
+		if (mode === "replace") {
+			// Drop the upcoming songs, but keep the one on screen (the first
+			// unplayed one) and everything already played.
+			const playingIndex = party.playlist.findIndex((v) => !v.playedAt);
+			party.playlist = party.playlist.filter(
+				(v, i) => v.playedAt || i === playingIndex,
+			);
+		}
+
+		const waiting = new Set(
+			party.playlist.filter((v) => !v.playedAt).map((v) => v.id),
+		);
+		// With nothing playing, the first loaded song goes straight on screen.
+		// Let the host start it rather than playing it the moment it loads.
+		const queueWasEmpty = waiting.size === 0;
+		const queueRoom = Math.max(0, MAX_PLAYLIST_SONGS * 2 - waiting.size);
+
+		let added = 0;
+		let skipped = 0;
+		const now = new Date();
+
+		for (const song of songs) {
+			if (waiting.has(song.id) || added >= queueRoom) {
+				skipped++;
+				continue;
+			}
+
+			waiting.add(song.id);
+			party.playlist.push({
+				id: song.id,
+				title: song.title,
+				artist: "Some artist",
+				song: "Song name",
+				createdAt: now,
+				singerName,
+				coverUrl: song.coverUrl,
+				playedAt: null,
+				postponedAt: null,
+				duration: song.duration,
+				...(queueWasEmpty && added === 0 ? { waitForPlay: true } : {}),
+			});
+			added++;
+		}
+
+		if (added > 0 || mode === "replace") {
+			await this.savekaraokeParty();
+			this.broadcast(JSON.stringify(party.playlist));
+			await this.ctx.storage.setAlarm(Date.now() + EXPIRY_PERIOD_MILLISECONDS);
+		}
+
+		return new Response(
+			JSON.stringify({ added, skipped } satisfies LoadSongsResponse),
+			{ status: 200, headers: { "Content-Type": "application/json" } },
+		);
 	}
 
 	broadcastParty() {

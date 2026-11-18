@@ -1,4 +1,3 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { type Party, Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { log } from "next-axiom";
@@ -6,13 +5,11 @@ import { z } from "zod";
 import { fetchPartyServer } from "~/server/party-server";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import {
-  normalizeCustomCode,
-  validateCustomCode,
-} from "~/server/utils/sqids";
-
-function hashHostKey(hostKey: string) {
-  return createHash("sha256").update(hostKey).digest("hex");
-}
+  canonicalHostKey,
+  hashHostCode,
+  checkHostKey,
+} from "~/server/utils/secrets";
+import { normalizeCustomCode, validateCustomCode } from "~/server/utils/sqids";
 
 /** The party without its host key hash, safe to send to any browser. */
 function toPublicParty({ hostKeyHash: _hostKeyHash, ...party }: Party) {
@@ -27,39 +24,44 @@ export const partyRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(3),
-        code: z.string().max(100).optional(),
+        /** The party code guests join with and the host rejoins with. */
+        code: z.string().trim().min(1, "Choose a party code.").max(100),
+        /** Proves the host (to load playlists or delete the party). */
+        pin: z.string().regex(/^\d{4}$/, "The PIN must be 4 digits."),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       log.info("Creating party", { name: input.name });
 
-      let customCode: string | undefined;
-      if (input.code?.trim()) {
-        customCode = normalizeCustomCode(input.code);
+      const customCode = normalizeCustomCode(input.code);
 
-        const invalid = validateCustomCode(customCode);
-        if (invalid) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: invalid });
-        }
-
-        const existing = await ctx.db.party.findUnique({
-          where: { hash: customCode },
-        });
-        if (existing) {
-          throw new TRPCError({ code: "CONFLICT", message: CODE_IN_USE_MESSAGE });
-        }
+      const invalid = validateCustomCode(customCode);
+      if (invalid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: invalid });
       }
 
-      // Only the browser that creates the party gets this key, which it needs
-      // to delete the party later. The database keeps just its hash.
-      const hostKey = randomBytes(32).toString("base64url");
+      const existing = await ctx.db.party.findUnique({
+        where: { hash: customCode },
+      });
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: CODE_IN_USE_MESSAGE,
+        });
+      }
+
+      // The host's PIN proves the host (to load playlists or delete the
+      // party). The creating browser keeps it; other browsers ask for it.
+      // The database keeps just its hash, and checkHostKey locks PIN checks
+      // after a few wrong tries so the PIN can't be guessed.
+      const hostKey = input.pin;
 
       let party;
       try {
         party = await ctx.db.party.createWithHash({
           name: input.name,
           hash: customCode,
-          hostKeyHash: hashHostKey(hostKey),
+          hostKeyHash: hashHostCode(hostKey),
         });
       } catch (e) {
         // Someone else took the same code between the check and the insert.
@@ -67,7 +69,10 @@ export const partyRouter = createTRPCRouter({
           e instanceof Prisma.PrismaClientKnownRequestError &&
           e.code === "P2002"
         ) {
-          throw new TRPCError({ code: "CONFLICT", message: CODE_IN_USE_MESSAGE });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: CODE_IN_USE_MESSAGE,
+          });
         }
         throw e;
       }
@@ -102,17 +107,12 @@ export const partyRouter = createTRPCRouter({
         return { deleted: true };
       }
 
-      const expected = Buffer.from(party.hostKeyHash ?? "", "hex");
-      const actual = Buffer.from(hashHostKey(input.hostKey), "hex");
-      if (
-        expected.length !== actual.length ||
-        !timingSafeEqual(expected, actual)
-      ) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only the browser that started this party can delete it.",
-        });
-      }
+      await checkHostKey(
+        ctx.db,
+        party,
+        input.hostKey,
+        "Only the host can delete this party.",
+      );
 
       // Erase the queue on the live server first, so a failure there leaves
       // the party intact and the host can try again.
@@ -132,6 +132,40 @@ export const partyRouter = createTRPCRouter({
 
       log.info("Party deleted", { hash: party.hash });
       return { deleted: true };
+    }),
+
+  /**
+   * Checks a host PIN (or an older party's host code) typed into another
+   * browser. Returns the key in the form that browser should keep.
+   */
+  verifyHost: publicProcedure
+    .input(z.object({ hash: z.string(), hostKey: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const party = await ctx.db.party.findUnique({
+        where: { hash: input.hash },
+      });
+
+      if (!party) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
+      }
+
+      if (!party.hostKeyHash) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "This party was created before host PINs existed, so it can " +
+            "only be hosted from the browser that created it.",
+        });
+      }
+
+      await checkHostKey(
+        ctx.db,
+        party,
+        input.hostKey,
+        "That PIN doesn't match this party.",
+      );
+
+      return { hostKey: canonicalHostKey(party.hostKeyHash, input.hostKey) };
     }),
 
   getByHash: publicProcedure

@@ -11,6 +11,7 @@ import { SongSearch } from "~/components/song-search";
 import {
   ChevronDown,
   ChevronUp,
+  ChevronsUp,
   ListMusic,
   Pause,
   Play,
@@ -275,6 +276,16 @@ export function PartyScene({
                             }
                           >
                             <PlayCircle size={20} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Move to top"
+                            title="Move to the top of the queue (next to play)"
+                            className="rounded p-2 hover:bg-white/20 disabled:opacity-30"
+                            disabled={i <= 1}
+                            onClick={() => moveSong(video.id, 1)}
+                          >
+                            <ChevronsUp size={20} />
                           </button>
                           <button
                             type="button"

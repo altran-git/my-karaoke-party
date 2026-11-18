@@ -119,7 +119,9 @@ export function PartyScene({
 
   const removeSong = (videoId: string) => {
     // Show it gone right away; the server broadcast confirms it.
-    setPlaylist((current) => current.filter((video) => video.id !== videoId));
+    setPlaylist((current) =>
+      current.filter((video) => video.id !== videoId || video.playedAt),
+    );
 
     socket.send(
       JSON.stringify({

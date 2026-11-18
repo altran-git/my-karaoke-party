@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Download,
   GripVertical,
   Loader2,
   Trash2,
@@ -13,7 +14,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -24,6 +24,7 @@ import { SongSearch } from "~/components/song-search";
 import { Button } from "~/components/ui/ui/button";
 import { Input } from "~/components/ui/ui/input";
 import { cn } from "~/lib/utils";
+import { playlistFileName, toPlaylistFile } from "~/utils/playlist-file";
 import type { RouterOutputs } from "~/trpc/react";
 import { api } from "~/trpc/react";
 
@@ -38,7 +39,6 @@ export default function PlaylistScene({
 }: {
   playlist: Playlist;
 }) {
-  const router = useRouter();
   const utils = api.useUtils();
 
   // Kept fresh after every change, and when someone else edits it too.
@@ -50,6 +50,8 @@ export default function PlaylistScene({
   const songs = playlist.songs;
 
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Set once the playlist is deleted and the browser kept this tab open.
+  const [deleted, setDeleted] = useState(false);
   // Songs being removed right now, hidden at once.
   const [removing, setRemoving] = useState<Set<number>>(new Set());
 
@@ -105,6 +107,20 @@ export default function PlaylistScene({
     );
 
     moveMutation.mutate({ hash: playlist.hash, songId, toIndex: to });
+  }
+
+  if (deleted) {
+    return (
+      <main className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center gap-4 px-4 text-center text-white">
+        <h1 className="text-outline text-2xl font-extrabold">
+          {`“${playlist.name}” was deleted`}
+        </h1>
+        <p className="opacity-80">You can close this tab.</p>
+        <Link href="/" className="text-sm underline-offset-4 hover:underline">
+          Go to the home page
+        </Link>
+      </main>
+    );
   }
 
   return (
@@ -266,6 +282,19 @@ export default function PlaylistScene({
           hash={playlist.hash}
           name={playlist.name}
           stats={playlist}
+          onExport={() => {
+            // Built here from what's on screen: no server call needed.
+            const blob = new Blob(
+              [toPlaylistFile(playlist.name, visibleSongs)],
+              { type: "application/json" },
+            );
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = playlistFileName(playlist.name);
+            link.click();
+            URL.revokeObjectURL(url);
+          }}
           onRenamed={() => void refresh()}
           onDelete={() => setDeleteOpen(true)}
         />
@@ -274,7 +303,13 @@ export default function PlaylistScene({
             deleteOpen ? { hash: playlist.hash, name: playlist.name } : null
           }
           onOpenChange={setDeleteOpen}
-          onDeleted={() => router.replace("/")}
+          onDeleted={() => {
+            // Browsers only let a page close a tab that a link or script
+            // opened (like the playlist links in Load playlist). If this tab
+            // is still here a moment later, say so instead.
+            window.close();
+            setTimeout(() => setDeleted(true), 300);
+          }}
         />
       </aside>
     </main>
@@ -325,6 +360,7 @@ function ManagePanel({
   stats,
   onRenamed,
   onDelete,
+  onExport,
 }: {
   hash: string;
   name: string;
@@ -339,6 +375,7 @@ function ManagePanel({
   >;
   onRenamed: (name: string) => void;
   onDelete: () => void;
+  onExport: () => void;
 }) {
   const rows: [string, string][] = [
     [
@@ -407,10 +444,20 @@ function ManagePanel({
         </Button>
       </form>
 
-      <Button variant="destructive" className="self-start" onClick={onDelete}>
-        <Trash2 className="mr-2 h-4 w-4" />
-        Delete playlist
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          title="Download the playlist's name and songs as a file, to keep or load into a party later"
+          onClick={onExport}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Export JSON
+        </Button>
+        <Button variant="destructive" onClick={onDelete}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete playlist
+        </Button>
+      </div>
     </section>
   );
 }

@@ -155,6 +155,58 @@ async function requireOverwritable(
   return target;
 }
 
+/**
+ * Sends songs to the party's queue on the live server (shuffled first if
+ * asked), sung by the host. Throws if the live server didn't take them.
+ */
+async function sendSongsToParty(
+  partyHash: string,
+  input: PlaylistSongInput[],
+  mode: LoadMode,
+  shuffle: boolean,
+) {
+  const songs = [...input];
+  if (shuffle) {
+    for (let i = songs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [songs[i], songs[j]] = [songs[j]!, songs[i]!];
+    }
+  }
+
+  const res = await fetchPartyServer(
+    partyHash,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        songs,
+        mode,
+        singerName: LOADED_SINGER_NAME,
+      } satisfies LoadSongsRequest),
+      cache: "no-store",
+    },
+    { action: "load-songs" },
+  );
+
+  const result = res.ok
+    ? ((await res.json()) as Partial<LoadSongsResponse>)
+    : null;
+
+  // An older live server answers this POST with the whole party instead.
+  if (!result || typeof result.added !== "number") {
+    log.error("Couldn't load songs into party", {
+      party: partyHash,
+      status: res.status,
+    });
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Couldn't load the playlist. Please try again.",
+    });
+  }
+
+  return { added: result.added, skipped: result.skipped ?? 0 };
+}
+
 export const playlistRouter = createTRPCRouter({
   /** Public view of a playlist: anyone with the link can see it. */
   get: publicProcedure
@@ -681,44 +733,12 @@ export const playlistRouter = createTRPCRouter({
         duration: s.duration ?? undefined,
       }));
 
-      if (input.shuffle) {
-        for (let i = songs.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [songs[i], songs[j]] = [songs[j]!, songs[i]!];
-        }
-      }
-
-      const res = await fetchPartyServer(
+      const result = await sendSongsToParty(
         party.hash,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            songs,
-            mode: input.mode,
-            singerName: LOADED_SINGER_NAME,
-          } satisfies LoadSongsRequest),
-          cache: "no-store",
-        },
-        { action: "load-songs" },
+        songs,
+        input.mode,
+        input.shuffle,
       );
-
-      const result = res.ok
-        ? ((await res.json()) as Partial<LoadSongsResponse>)
-        : null;
-
-      // An older live server answers this POST with the whole party instead.
-      if (!result || typeof result.added !== "number") {
-        log.error("Couldn't load playlist into party", {
-          party: party.hash,
-          playlist: playlist.hash,
-          status: res.status,
-        });
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Couldn't load the playlist. Please try again.",
-        });
-      }
 
       // Raw SQL, so loading doesn't count as a change (updatedAt).
       await ctx.db.$executeRaw`
@@ -734,6 +754,42 @@ export const playlistRouter = createTRPCRouter({
         playlist: playlist.hash,
         ...result,
       });
-      return { added: result.added, skipped: result.skipped ?? 0 };
+      return result;
+    }),
+
+  /**
+   * Adds songs given directly (from a playlist file) to the queue of a party
+   * this browser hosts. No saved playlist is involved, so no stats change.
+   */
+  loadSongsIntoParty: publicProcedure
+    .input(
+      z.object({
+        partyHash: Hash,
+        hostKey: Secret,
+        songs: Songs.min(1, "The file has no songs."),
+        mode: LoadMode.default("append"),
+        shuffle: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const party = await requirePartyHost(
+        ctx.db,
+        input.partyHash,
+        input.hostKey,
+        "Only the host of this party can load songs into it.",
+      );
+
+      const result = await sendSongsToParty(
+        party.hash,
+        input.songs,
+        input.mode,
+        input.shuffle,
+      );
+
+      log.info("Playlist file loaded into party", {
+        party: party.hash,
+        ...result,
+      });
+      return result;
     }),
 });

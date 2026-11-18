@@ -2,13 +2,17 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDebouncedValue } from "@mantine/hooks";
-import { Check, Copy, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LoadMode } from "party/types";
 import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
+import {
+  MAX_PLAYLIST_FILE_BYTES,
+  parsePlaylistFile,
+} from "~/utils/playlist-file";
 import { rememberParty } from "~/utils/recent-parties";
 import { getUrl } from "~/utils/url";
 import { Button } from "./ui/ui/button";
@@ -425,6 +429,41 @@ export function LoadPlaylistDialog({
     if (open) setSearch("");
   }, [open]);
 
+  // Loading from a playlist file exported earlier.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadFile = api.playlist.loadSongsIntoParty.useMutation({
+    onError: (err) => toast.error(err.message),
+  });
+
+  async function loadFromFile(file: File) {
+    if (file.size > MAX_PLAYLIST_FILE_BYTES) {
+      toast.error("That file is too big to be a playlist.");
+      return;
+    }
+
+    const parsed = parsePlaylistFile(await file.text());
+    if ("error" in parsed) {
+      toast.error(parsed.error);
+      return;
+    }
+
+    loadFile.mutate(
+      { partyHash, hostKey, songs: parsed.songs, mode, shuffle },
+      {
+        onSuccess: ({ added, skipped }) => {
+          toast.success(
+            `Added ${added} ${added === 1 ? "song" : "songs"}` +
+              (parsed.name ? ` from “${parsed.name}”` : "") +
+              " to the queue" +
+              (skipped > 0 ? ` (${skipped} already queued)` : "") +
+              ".",
+          );
+          onOpenChange(false);
+        },
+      },
+    );
+  }
+
   const list = api.playlist.list.useInfiniteQuery(
     { search: debouncedSearch || undefined, limit: LIST_PAGE_SIZE },
     {
@@ -549,6 +588,39 @@ export function LoadPlaylistDialog({
                 : "No playlists yet. Save one from a party first."}
             </p>
           )}
+
+          <div className="mt-4 flex flex-col gap-1 border-t border-white/10 pt-4">
+            <span className="text-sm text-muted-foreground">
+              Or load a playlist exported as a JSON file
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              aria-label="Playlist JSON file"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                // Clear it, so choosing the same file again still works.
+                e.target.value = "";
+                if (file) void loadFromFile(file);
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              className="self-start"
+              disabled={loadFile.isPending || load.isPending}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {loadFile.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
+              Load from a JSON file
+            </Button>
+          </div>
 
           <div className="mt-5 flex justify-end">
             <Dialog.Close asChild>

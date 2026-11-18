@@ -41,18 +41,24 @@ model Party {
 /// A saved list of songs. Everyone can see, load, rename and delete any
 /// playlist (deleting asks them to type DELETE).
 model Playlist {
-  id          Int            @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   /// Random, unguessable public id used in the link /playlists/<hash>.
-  hash        String         @unique
-  name        String
+  hash            String         @unique
+  name            String
   /// Hash of the party the songs were saved from, if any.
-  sourceParty String?
+  sourceParty     String?
   /// That party's hostKeyHash when the songs were saved. Its host can later
   /// overwrite the playlist from a party with the same code and PIN.
-  hostKeyHash String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  songs       PlaylistSong[]
+  hostKeyHash     String?
+  createdAt       DateTime       @default(now())
+  /// Last change to the name or songs. Loading the playlist doesn't count.
+  updatedAt       DateTime       @updatedAt
+  /// How many times it was loaded into a party, when, and into which one
+  /// (party hash). Updated with raw SQL so updatedAt isn't touched.
+  loadCount       Int            @default(0)
+  lastLoadedAt    DateTime?
+  lastLoadedParty String?
+  songs           PlaylistSong[]
 }
 
 model PlaylistSong {

@@ -108,10 +108,11 @@ export default function PlaylistScene({
   }
 
   return (
-    <main className="mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col gap-6 px-4 py-8 text-white md:h-[100dvh] md:flex-row md:items-start md:py-0">
-      {/* Search on the left (below the playlist on narrow screens), scrolling
-          on its own so the song list stays in view. */}
-      <aside className="order-2 w-full md:order-none md:h-full md:basis-2/5 md:overflow-y-auto md:py-8">
+    <main className="mx-auto grid min-h-[100dvh] w-full max-w-7xl grid-cols-1 gap-6 px-4 py-8 text-white md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-cols-[minmax(0,3fr)_minmax(0,4fr)_minmax(0,2.5fr)]">
+      {/* Wide screens: search | playlist | manage. Medium: search on the
+          left, playlist and manage on the right. Phones: playlist, manage,
+          then search. The side columns stay in view while the page scrolls. */}
+      <aside className="order-3 self-start md:sticky md:top-8 md:order-none md:col-start-1 md:row-span-2 md:row-start-1 md:max-h-[calc(100dvh-4rem)] md:overflow-y-auto">
         <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
           <h2 className="text-lg flex items-center gap-2 font-bold">
             Add songs
@@ -129,7 +130,7 @@ export default function PlaylistScene({
         </section>
       </aside>
 
-      <div className="order-1 flex w-full min-w-0 flex-col gap-6 md:order-none md:h-full md:basis-3/5 md:overflow-y-auto md:py-8">
+      <div className="order-1 flex min-w-0 flex-col gap-6 md:order-none md:col-start-2 md:row-start-1">
         <header className="flex flex-col gap-2">
           <Link href="/" className="text-sm opacity-70 hover:underline">
             ← My Karaoke Party
@@ -258,10 +259,13 @@ export default function PlaylistScene({
             </p>
           )}
         </section>
+      </div>
 
+      <aside className="order-2 self-start md:order-none md:col-start-2 md:row-start-2 lg:sticky lg:top-8 lg:col-start-3 lg:row-span-2 lg:row-start-1">
         <ManagePanel
           hash={playlist.hash}
           name={playlist.name}
+          stats={playlist}
           onRenamed={() => void refresh()}
           onDelete={() => setDeleteOpen(true)}
         />
@@ -272,7 +276,7 @@ export default function PlaylistScene({
           onOpenChange={setDeleteOpen}
           onDeleted={() => router.replace("/")}
         />
-      </div>
+      </aside>
     </main>
   );
 }
@@ -301,17 +305,47 @@ function CopyLinkButton({ url }: { url: string }) {
 }
 
 /** Rename and delete. Anyone can do both. */
+/** Like "Nov 18, 9:00 AM", with the year only when it isn't this year. */
+function formatDate(date: Date | string | null | undefined) {
+  if (!date) return "Never";
+  const d = new Date(date);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Rename, delete and some numbers about the playlist. */
 function ManagePanel({
   hash,
   name,
+  stats,
   onRenamed,
   onDelete,
 }: {
   hash: string;
   name: string;
+  stats: Pick<
+    Playlist,
+    "loadCount" | "lastLoadedAt" | "lastLoadedParty" | "updatedAt" | "createdAt"
+  >;
   onRenamed: (name: string) => void;
   onDelete: () => void;
 }) {
+  const rows: [string, string][] = [
+    [
+      "Loaded",
+      `${stats.loadCount} ${stats.loadCount === 1 ? "time" : "times"}`,
+    ],
+    ["Last loaded", formatDate(stats.lastLoadedAt)],
+    ["Last party", stats.lastLoadedParty ?? "None yet"],
+    ["Last modified", formatDate(stats.updatedAt)],
+    ["Created", formatDate(stats.createdAt)],
+  ];
+
   const [newName, setNewName] = useState(name);
 
   const update = api.playlist.update.useMutation({
@@ -325,6 +359,19 @@ function ManagePanel({
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
       <h2 className="text-lg font-bold">Manage playlist</h2>
+
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="opacity-70">{label}</dt>
+            {/* Dates are shown in the viewer's time zone, which the server
+                can't know, so the first render may differ from the server's. */}
+            <dd suppressHydrationWarning className="break-words">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
 
       <form
         className="flex gap-2"

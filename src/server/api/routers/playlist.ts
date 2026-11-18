@@ -37,7 +37,29 @@ function toSongRows(songs: PlaylistSongInput[]) {
   }));
 }
 
-/** Creates a playlist with a fresh random link. */
+/** Whether another playlist already has this name, ignoring capitals. */
+async function nameTaken(db: typeof Db, name: string, exceptId?: number) {
+  const other = await db.playlist.findFirst({
+    where: {
+      name: { equals: name.trim(), mode: "insensitive" },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+    select: { id: true },
+  });
+  return !!other;
+}
+
+function nameTakenError(name: string) {
+  return new TRPCError({
+    code: "CONFLICT",
+    message: `A playlist named “${name.trim()}” already exists. Please pick another name.`,
+  });
+}
+
+/**
+ * Creates a playlist with a fresh random link. Its name must be unused;
+ * with `suffixIfTaken`, " (2)", " (3)"... is added instead of refusing.
+ */
 async function createPlaylist(
   db: typeof Db,
   data: {
@@ -45,15 +67,25 @@ async function createPlaylist(
     songs: PlaylistSongInput[];
     sourceParty?: string;
     hostKeyHash?: string | null;
+    suffixIfTaken?: boolean;
   },
 ) {
+  let name = data.name.trim();
+  if (await nameTaken(db, name)) {
+    if (!data.suffixIfTaken) throw nameTakenError(name);
+
+    let n = 2;
+    while (await nameTaken(db, `${name} (${n})`)) n++;
+    name = `${name} (${n})`;
+  }
+
   // The hash is random, so a clash is all but impossible; retry just in case.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const playlist = await db.playlist.create({
         data: {
           hash: generatePlaylistHash(),
-          name: data.name,
+          name,
           sourceParty: data.sourceParty,
           hostKeyHash: data.hostKeyHash ?? null,
           songs: { create: toSongRows(data.songs) },
@@ -140,6 +172,10 @@ export const playlistRouter = createTRPCRouter({
         name: playlist.name,
         createdAt: playlist.createdAt,
         updatedAt: playlist.updatedAt,
+        sourceParty: playlist.sourceParty,
+        loadCount: playlist.loadCount,
+        lastLoadedAt: playlist.lastLoadedAt,
+        lastLoadedParty: playlist.lastLoadedParty,
         songs: playlist.songs.map((s) => ({
           /** This entry in the playlist, for removeSong. */
           songId: s.id,
@@ -374,6 +410,10 @@ export const playlistRouter = createTRPCRouter({
         });
       }
 
+      if (await nameTaken(ctx.db, input.name, playlist.id)) {
+        throw nameTakenError(input.name);
+      }
+
       await ctx.db.playlist.update({
         where: { id: playlist.id },
         data: { name: input.name },
@@ -422,6 +462,11 @@ export const playlistRouter = createTRPCRouter({
            */
           overwriteHash: Hash.optional(),
           hostKey: Secret.optional(),
+          /**
+           * If the name is taken, add " (2)" etc. instead of refusing. Used
+           * when saving automatically before deleting a party.
+           */
+          suffixIfTaken: z.boolean().default(false),
           /** Songs already sung, in the order they were played. */
           includePlayed: z.boolean().default(true),
           /** Songs still waiting, in queue order (the one on screen first). */
@@ -553,6 +598,7 @@ export const playlistRouter = createTRPCRouter({
         songs,
         sourceParty: party.hash,
         hostKeyHash: party.hostKeyHash,
+        suffixIfTaken: input.suffixIfTaken,
       });
 
       log.info("Playlist saved from party", {
@@ -672,6 +718,14 @@ export const playlistRouter = createTRPCRouter({
           message: "Couldn't load the playlist. Please try again.",
         });
       }
+
+      // Raw SQL, so loading doesn't count as a change (updatedAt).
+      await ctx.db.$executeRaw`
+        UPDATE "Playlist"
+        SET "loadCount" = "loadCount" + 1,
+            "lastLoadedAt" = now() AT TIME ZONE 'UTC',
+            "lastLoadedParty" = ${party.hash}
+        WHERE id = ${playlist.id}`;
 
       log.info("Playlist loaded into party", {
         party: party.hash,

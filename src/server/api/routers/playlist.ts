@@ -141,12 +141,89 @@ export const playlistRouter = createTRPCRouter({
         createdAt: playlist.createdAt,
         updatedAt: playlist.updatedAt,
         songs: playlist.songs.map((s) => ({
+          /** This entry in the playlist, for removeSong. */
+          songId: s.id,
           id: s.videoId,
           title: s.title,
           coverUrl: s.coverUrl,
           duration: s.duration ?? undefined,
         })),
       };
+    }),
+
+  /**
+   * Adds a song to the end of a playlist. Anyone with the link can. A song
+   * already in the playlist isn't added twice.
+   */
+  addSong: publicProcedure
+    .input(z.object({ hash: Hash, song: PlaylistSongInput }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        const playlist = await tx.playlist.findUnique({
+          where: { hash: input.hash },
+          select: { id: true, _count: { select: { songs: true } } },
+        });
+        if (!playlist) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Playlist not found.",
+          });
+        }
+        if (playlist._count.songs >= MAX_PLAYLIST_SONGS) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `A playlist can have at most ${MAX_PLAYLIST_SONGS} songs.`,
+          });
+        }
+
+        const existing = await tx.playlistSong.findFirst({
+          where: { playlistId: playlist.id, videoId: input.song.id },
+          select: { id: true },
+        });
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "That song is already in this playlist.",
+          });
+        }
+
+        const last = await tx.playlistSong.aggregate({
+          where: { playlistId: playlist.id },
+          _max: { position: true },
+        });
+        const [row] = toSongRows([input.song]);
+        await tx.playlistSong.create({
+          data: {
+            ...row!,
+            position: (last._max.position ?? -1) + 1,
+            playlistId: playlist.id,
+          },
+        });
+        await tx.playlist.update({
+          where: { id: playlist.id },
+          data: { updatedAt: new Date() },
+        });
+
+        return { added: true };
+      });
+    }),
+
+  /** Removes one song from a playlist. Anyone with the link can. */
+  removeSong: publicProcedure
+    .input(z.object({ hash: Hash, songId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      // Matched on both, so a song can only be removed from its own
+      // playlist. Already gone (someone else removed it) isn't an error.
+      const { count } = await ctx.db.playlistSong.deleteMany({
+        where: { id: input.songId, playlist: { hash: input.hash } },
+      });
+      if (count > 0) {
+        await ctx.db.playlist.update({
+          where: { hash: input.hash },
+          data: { updatedAt: new Date() },
+        });
+      }
+      return { removed: count > 0 };
     }),
 
   /**
@@ -227,7 +304,7 @@ export const playlistRouter = createTRPCRouter({
       return created;
     }),
 
-  /** Renames the playlist and/or replaces its songs. Anyone can do this. */
+  /** Renames the playlist. Anyone can do this. */
   update: publicProcedure
     .input(z.object({ hash: Hash, name: PlaylistName }))
     .mutation(async ({ ctx, input }) => {

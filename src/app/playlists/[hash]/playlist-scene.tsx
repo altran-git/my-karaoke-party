@@ -1,63 +1,71 @@
 "use client";
 
 import { decode } from "html-entities";
-import { Check, Copy, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Trash2, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { LoadMode } from "party/types";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   DeletePlaylistDialog,
-  LoadOptions,
   playlistUrl,
 } from "~/components/playlist-dialogs";
+import { SongSearch } from "~/components/song-search";
 import { Button } from "~/components/ui/ui/button";
 import { Input } from "~/components/ui/ui/input";
 import type { RouterOutputs } from "~/trpc/react";
 import { api } from "~/trpc/react";
-import { getRecentParties, type RecentParty } from "~/utils/recent-parties";
 
 type Playlist = NonNullable<RouterOutputs["playlist"]["get"]>;
 
-export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
+/**
+ * A saved playlist. Anyone with the link can add songs (by searching),
+ * remove songs, rename it or delete it.
+ */
+export default function PlaylistScene({
+  playlist: initial,
+}: {
+  playlist: Playlist;
+}) {
   const router = useRouter();
+  const utils = api.useUtils();
 
-  const [name, setName] = useState(playlist.name);
+  // Kept fresh after every change, and when someone else edits it too.
+  const { data } = api.playlist.get.useQuery(
+    { hash: initial.hash },
+    { initialData: initial },
+  );
+  const playlist = data ?? initial;
+  const songs = playlist.songs;
+
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Songs being removed right now, hidden at once.
+  const [removing, setRemoving] = useState<Set<number>>(new Set());
 
-  // Parties this browser hosts (has the key for), to load the songs into.
-  const [parties, setParties] = useState<RecentParty[]>([]);
-  const [partyHash, setPartyHash] = useState("");
-  const [mode, setMode] = useState<LoadMode>("append");
-  const [shuffle, setShuffle] = useState(false);
+  const refresh = () => utils.playlist.get.invalidate({ hash: initial.hash });
 
-  // localStorage is only readable in the browser, after hydration.
-  useEffect(() => {
-    const hosted = getRecentParties().filter((p) => p.hostKey);
-    setParties(hosted);
-    setPartyHash(hosted[0]?.hash ?? "");
-  }, []);
-
-  const load = api.playlist.loadIntoParty.useMutation({
-    onSuccess: ({ added, skipped }) => {
-      toast.success(
-        `Added ${added} ${added === 1 ? "song" : "songs"} to the queue` +
-          (skipped > 0 ? ` (${skipped} already queued)` : "") +
-          ".",
-        {
-          action: {
-            label: "Open player",
-            onClick: () => router.push(`/player/${partyHash}`),
-          },
-        },
-      );
+  const addSong = api.playlist.addSong.useMutation({
+    onSuccess: (_data, { song }) => {
+      toast.success(`Added “${decode(song.title)}”.`);
     },
     onError: (err) => toast.error(err.message),
+    onSettled: () => void refresh(),
   });
 
-  const selectedParty = parties.find((p) => p.hash === partyHash);
+  const removeSong = api.playlist.removeSong.useMutation({
+    onError: (err) => toast.error(err.message),
+    onSettled: async (_data, _err, { songId }) => {
+      await refresh();
+      setRemoving((current) => {
+        const next = new Set(current);
+        next.delete(songId);
+        return next;
+      });
+    },
+  });
+
+  const visibleSongs = songs.filter((song) => !removing.has(song.songId));
 
   return (
     <main className="mx-auto flex min-h-[100dvh] w-full max-w-2xl flex-col gap-6 px-4 py-8 text-white">
@@ -66,83 +74,21 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
           ← My Karaoke Party
         </Link>
         <h1 className="text-outline text-3xl font-extrabold tracking-tight">
-          {name}
+          {playlist.name}
         </h1>
         <div className="flex items-center gap-3 text-sm opacity-80">
           <span>
-            {playlist.songs.length}{" "}
-            {playlist.songs.length === 1 ? "song" : "songs"}
+            {visibleSongs.length} {visibleSongs.length === 1 ? "song" : "songs"}
           </span>
           <CopyLinkButton url={playlistUrl(playlist.hash)} />
         </div>
       </header>
 
-      <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
-        <h2 className="text-lg font-bold">Load into my party</h2>
-        {parties.length > 0 ? (
-          <>
-            <label className="flex flex-col gap-1 text-sm">
-              Party
-              <select
-                value={partyHash}
-                onChange={(e) => setPartyHash(e.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-foreground"
-              >
-                {parties.map((p) => (
-                  <option key={p.hash} value={p.hash}>
-                    {`${p.name} (${p.hash})`}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <LoadOptions
-              mode={mode}
-              onModeChange={setMode}
-              shuffle={shuffle}
-              onShuffleChange={setShuffle}
-            />
-            <Button
-              className="self-start"
-              disabled={
-                !selectedParty?.hostKey ||
-                load.isPending ||
-                playlist.songs.length === 0
-              }
-              onClick={() =>
-                selectedParty?.hostKey &&
-                load.mutate({
-                  partyHash: selectedParty.hash,
-                  hostKey: selectedParty.hostKey,
-                  playlistHash: playlist.hash,
-                  mode,
-                  shuffle,
-                })
-              }
-            >
-              {load.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Load songs
-            </Button>
-          </>
-        ) : (
-          <p className="text-sm opacity-80">
-            No party is hosted in this browser yet.{" "}
-            <Link href="/" className="underline">
-              Start a party
-            </Link>{" "}
-            and come back to this link, or open your party&apos;s player screen
-            and use <span className="font-semibold">Load playlist</span>. It
-            asks for the host PIN if this browser didn&apos;t create the party.
-          </p>
-        )}
-      </section>
-
       <section>
         <ol className="flex flex-col gap-2">
-          {playlist.songs.map((song, i) => (
+          {visibleSongs.map((song, i) => (
             <li
-              key={`${song.id}-${i}`}
+              key={song.songId}
               className="flex items-center gap-3 rounded-md bg-black/20 p-2"
             >
               <span className="w-6 shrink-0 text-right text-sm opacity-60">
@@ -163,22 +109,59 @@ export default function PlaylistScene({ playlist }: { playlist: Playlist }) {
                   {song.duration}
                 </span>
               )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`Remove ${decode(song.title)}`}
+                title="Remove from this playlist"
+                className="h-8 w-8 shrink-0 text-red-300 hover:text-red-200"
+                onClick={() => {
+                  setRemoving((current) => new Set(current).add(song.songId));
+                  removeSong.mutate({
+                    hash: playlist.hash,
+                    songId: song.songId,
+                  });
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </li>
           ))}
         </ol>
-        {playlist.songs.length === 0 && (
-          <p className="text-sm opacity-80">This playlist has no songs yet.</p>
+        {visibleSongs.length === 0 && (
+          <p className="text-sm opacity-80">
+            This playlist has no songs yet. Search below to add some.
+          </p>
         )}
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-lg border border-white/20 bg-black/30 p-4">
+        <h2 className="text-lg flex items-center gap-2 font-bold">
+          Add songs
+          {addSong.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        </h2>
+        <SongSearch
+          playlist={songs.map((song) => ({ id: song.id }))}
+          onVideoAdded={(id, title, coverUrl) =>
+            addSong.mutate({
+              hash: playlist.hash,
+              song: { id, title: title.trim(), coverUrl },
+            })
+          }
+        />
       </section>
 
       <ManagePanel
         hash={playlist.hash}
-        name={name}
-        onRenamed={setName}
+        name={playlist.name}
+        onRenamed={() => void refresh()}
         onDelete={() => setDeleteOpen(true)}
       />
       <DeletePlaylistDialog
-        playlist={deleteOpen ? { hash: playlist.hash, name } : null}
+        playlist={
+          deleteOpen ? { hash: playlist.hash, name: playlist.name } : null
+        }
         onOpenChange={setDeleteOpen}
         onDeleted={() => router.replace("/")}
       />

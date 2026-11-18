@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Plus, Search, Check, Loader2, Frown } from "lucide-react";
-import type { KaraokeParty } from "party/types";
 import { PreviewPlayer } from "./preview-player";
 import { removeBracketedContent } from "~/utils/string";
 import { decode } from "html-entities";
@@ -13,7 +12,8 @@ import { PoweredByYouTube } from "./powered-by-youtube";
 
 type Props = {
   onVideoAdded: (videoId: string, title: string, coverUrl: string) => void;
-  playlist: KaraokeParty["playlist"];
+  /** Songs already added, shown with a check instead of a + button. */
+  playlist: { id: string; playedAt?: Date | null }[];
 };
 
 export function SongSearch({ onVideoAdded, playlist }: Props) {

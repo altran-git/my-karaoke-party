@@ -13,7 +13,11 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import type { db as Db } from "~/server/db";
 import { fetchPartyServer } from "~/server/party-server";
-import { generatePlaylistHash, requirePartyHost } from "~/server/utils/secrets";
+import {
+  checkHostKey,
+  generatePlaylistHash,
+  requirePartyHost,
+} from "~/server/utils/secrets";
 
 /** Every song loaded from a playlist is sung by the host. */
 const LOADED_SINGER_NAME = "Host";
@@ -36,7 +40,12 @@ function toSongRows(songs: PlaylistSongInput[]) {
 /** Creates a playlist with a fresh random link. */
 async function createPlaylist(
   db: typeof Db,
-  data: { name: string; songs: PlaylistSongInput[]; sourceParty?: string },
+  data: {
+    name: string;
+    songs: PlaylistSongInput[];
+    sourceParty?: string;
+    hostKeyHash?: string | null;
+  },
 ) {
   // The hash is random, so a clash is all but impossible; retry just in case.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -46,6 +55,7 @@ async function createPlaylist(
           hash: generatePlaylistHash(),
           name: data.name,
           sourceParty: data.sourceParty,
+          hostKeyHash: data.hostKeyHash ?? null,
           songs: { create: toSongRows(data.songs) },
         },
       });
@@ -67,6 +77,50 @@ async function createPlaylist(
   }
 
   throw new Error("Couldn't pick a unique playlist link");
+}
+
+/**
+ * The playlist `hash`, if the caller may overwrite it from `party`: they
+ * must be its verified host (checkHostKey, with the PIN lockout), and the
+ * playlist must have been saved from a party with the same code and the
+ * same host PIN. Throws otherwise.
+ */
+async function requireOverwritable(
+  db: typeof Db,
+  party: { id: number; hash: string; hostKeyHash: string | null },
+  hostKey: string | undefined,
+  hash: string,
+) {
+  if (!hostKey) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Only the host can overwrite a playlist.",
+    });
+  }
+  await checkHostKey(
+    db,
+    party,
+    hostKey,
+    "Only the host can overwrite a playlist.",
+  );
+
+  const target = await db.playlist.findUnique({ where: { hash } });
+  if (!target) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Playlist not found." });
+  }
+  if (
+    !target.hostKeyHash ||
+    !party.hostKeyHash ||
+    target.sourceParty !== party.hash ||
+    target.hostKeyHash !== party.hostKeyHash
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "You can only overwrite playlists saved from parties you hosted.",
+    });
+  }
+  return target;
 }
 
 export const playlistRouter = createTRPCRouter({
@@ -175,13 +229,7 @@ export const playlistRouter = createTRPCRouter({
 
   /** Renames the playlist and/or replaces its songs. Anyone can do this. */
   update: publicProcedure
-    .input(
-      z.object({
-        hash: Hash,
-        name: PlaylistName.optional(),
-        songs: Songs.optional(),
-      }),
-    )
+    .input(z.object({ hash: Hash, name: PlaylistName }))
     .mutation(async ({ ctx, input }) => {
       const playlist = await ctx.db.playlist.findUnique({
         where: { hash: input.hash },
@@ -193,24 +241,9 @@ export const playlistRouter = createTRPCRouter({
         });
       }
 
-      await ctx.db.$transaction(async (tx) => {
-        if (input.songs) {
-          await tx.playlistSong.deleteMany({
-            where: { playlistId: playlist.id },
-          });
-          await tx.playlistSong.createMany({
-            data: toSongRows(input.songs).map((row) => ({
-              ...row,
-              playlistId: playlist.id,
-            })),
-          });
-        }
-
-        await tx.playlist.update({
-          where: { id: playlist.id },
-          // Touch updatedAt even when only the songs changed.
-          data: { name: input.name ?? playlist.name },
-        });
+      await ctx.db.playlist.update({
+        where: { id: playlist.id },
+        data: { name: input.name },
       });
 
       return { updated: true };
@@ -249,6 +282,13 @@ export const playlistRouter = createTRPCRouter({
         .object({
           partyHash: Hash,
           name: PlaylistName,
+          /**
+           * Replace the songs of this playlist instead of creating a new one.
+           * Only for the host of the party it was saved from (see
+           * requireOverwritable); needs `hostKey`.
+           */
+          overwriteHash: Hash.optional(),
+          hostKey: Secret.optional(),
           /** Songs already sung, in the order they were played. */
           includePlayed: z.boolean().default(true),
           /** Songs still waiting, in queue order (the one on screen first). */
@@ -259,15 +299,25 @@ export const playlistRouter = createTRPCRouter({
         }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Anyone at the party can save its songs: they can already see them,
-      // and saving only copies them into a new playlist of their own.
+      // Anyone at the party can save its songs as a new playlist: they can
+      // already see them. Overwriting is for the host only.
       const found = await ctx.db.party.findUnique({
         where: { hash: input.partyHash },
       });
       if (!found?.hash) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
       }
-      const party = { hash: found.hash };
+      const party = { ...found, hash: found.hash };
+
+      // Check before reading the queue, so a refusal costs nothing.
+      const target = input.overwriteHash
+        ? await requireOverwritable(
+            ctx.db,
+            party,
+            input.hostKey,
+            input.overwriteHash,
+          )
+        : null;
 
       const res = await fetchPartyServer(party.hash, {
         method: "GET",
@@ -336,10 +386,40 @@ export const playlistRouter = createTRPCRouter({
         });
       }
 
+      if (target) {
+        await ctx.db.$transaction([
+          ctx.db.playlistSong.deleteMany({ where: { playlistId: target.id } }),
+          ctx.db.playlistSong.createMany({
+            data: toSongRows(songs).map((row) => ({
+              ...row,
+              playlistId: target.id,
+            })),
+          }),
+          // Touch updatedAt, so it moves up in lists sorted by date.
+          ctx.db.playlist.update({
+            where: { id: target.id },
+            data: { updatedAt: new Date() },
+          }),
+        ]);
+
+        log.info("Playlist overwritten from party", {
+          hash: target.hash,
+          party: party.hash,
+          songs: songs.length,
+        });
+        return {
+          hash: target.hash,
+          name: target.name,
+          songCount: songs.length,
+          overwritten: true,
+        };
+      }
+
       const created = await createPlaylist(ctx.db, {
         name: input.name,
         songs,
         sourceParty: party.hash,
+        hostKeyHash: party.hostKeyHash,
       });
 
       log.info("Playlist saved from party", {
@@ -347,7 +427,41 @@ export const playlistRouter = createTRPCRouter({
         party: party.hash,
         songs: songs.length,
       });
-      return created;
+      return { ...created, overwritten: false };
+    }),
+
+  /**
+   * Playlists the host of this party may overwrite: ones saved from a party
+   * with this code and this host PIN. Newest first.
+   */
+  overwritable: publicProcedure
+    .input(z.object({ partyHash: Hash, hostKey: Secret }))
+    .query(async ({ ctx, input }) => {
+      const party = await requirePartyHost(
+        ctx.db,
+        input.partyHash,
+        input.hostKey,
+      );
+      if (!party.hostKeyHash) return [];
+
+      const playlists = await ctx.db.playlist.findMany({
+        where: { sourceParty: party.hash, hostKeyHash: party.hostKeyHash },
+        orderBy: { updatedAt: "desc" },
+        take: 50,
+        select: {
+          hash: true,
+          name: true,
+          updatedAt: true,
+          _count: { select: { songs: true } },
+        },
+      });
+
+      return playlists.map((p) => ({
+        hash: p.hash,
+        name: p.name,
+        updatedAt: p.updatedAt,
+        songCount: p._count.songs,
+      }));
     }),
 
   /** Adds a playlist's songs to the queue of a party this browser hosts. */

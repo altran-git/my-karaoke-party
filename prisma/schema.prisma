@@ -47,6 +47,9 @@ model Playlist {
   name        String
   /// Hash of the party the songs were saved from, if any.
   sourceParty String?
+  /// That party's hostKeyHash when the songs were saved. Its host can later
+  /// overwrite the playlist from a party with the same code and PIN.
+  hostKeyHash String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   songs       PlaylistSong[]

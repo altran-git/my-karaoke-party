@@ -319,6 +319,7 @@ export default function PlayerScene({ party, initialPlaylist }: Props) {
                 open={saveOpen}
                 onOpenChange={setSaveOpen}
                 partyHash={party.hash}
+                hostKey={hostKey}
                 defaultName={`${party.name} ${new Date().toLocaleDateString()}`}
               />
             </>

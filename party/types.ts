@@ -104,6 +104,11 @@ export type VideoInPlaylist = Omit<Video, "duration"> & {
 	playedAt: Date | null;
 	postponedAt?: Date | null;
 	duration: string | undefined;
+	/**
+	 * Set on the first song of a playlist loaded into an empty queue: the
+	 * player screen shows it paused instead of starting it right away.
+	 */
+	waitForPlay?: boolean;
 };
 
 /** One song that finished (or was skipped past) on the player screen. */

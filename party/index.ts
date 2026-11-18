@@ -399,6 +399,9 @@ export class KaraokeServer extends Server<Env> {
 		const waiting = new Set(
 			party.playlist.filter((v) => !v.playedAt).map((v) => v.id),
 		);
+		// With nothing playing, the first loaded song goes straight on screen.
+		// Let the host start it rather than playing it the moment it loads.
+		const queueWasEmpty = waiting.size === 0;
 		const queueRoom = Math.max(0, MAX_PLAYLIST_SONGS * 2 - waiting.size);
 
 		let added = 0;
@@ -423,6 +426,7 @@ export class KaraokeServer extends Server<Env> {
 				playedAt: null,
 				postponedAt: null,
 				duration: song.duration,
+				...(queueWasEmpty && added === 0 ? { waitForPlay: true } : {}),
 			});
 			added++;
 		}

@@ -119,8 +119,9 @@ export function Player({
       start: 0,
       // Start each song as soon as it loads, so the queue plays on after a
       // song ends or is skipped. Browsers may still block this until someone
-      // has clicked on the page.
-      autoplay: 1,
+      // has clicked on the page. The first song of a playlist loaded into an
+      // empty queue waits for the host to press play instead.
+      autoplay: video.waitForPlay ? 0 : 1,
       rel: 0,
       controls: 1,
       // Hide YouTube's fullscreen button: it fullscreens only the video and

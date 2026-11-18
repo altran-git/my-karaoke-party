@@ -1,7 +1,16 @@
 "use client";
 
 import { decode } from "html-entities";
-import { Check, Copy, Loader2, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  GripVertical,
+  Loader2,
+  Trash2,
+  X,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,6 +23,7 @@ import {
 import { SongSearch } from "~/components/song-search";
 import { Button } from "~/components/ui/ui/button";
 import { Input } from "~/components/ui/ui/input";
+import { cn } from "~/lib/utils";
 import type { RouterOutputs } from "~/trpc/react";
 import { api } from "~/trpc/react";
 
@@ -67,6 +77,36 @@ export default function PlaylistScene({
 
   const visibleSongs = songs.filter((song) => !removing.has(song.songId));
 
+  // The song being dragged, and the slot it's hovering over.
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const moveMutation = api.playlist.moveSong.useMutation({
+    onError: (err) => toast.error(err.message),
+    onSettled: () => void refresh(),
+  });
+
+  /** Moves a song to visible position `toVisible`, showing it right away. */
+  function moveSong(songId: number, toVisible: number) {
+    const target = visibleSongs[toVisible];
+    if (!target || target.songId === songId) return;
+
+    // Positions on the server count every song, so aim for the slot where
+    // the song now at `toVisible` sits in the full list.
+    const from = songs.findIndex((song) => song.songId === songId);
+    const to = songs.findIndex((song) => song.songId === target.songId);
+    if (from === -1 || to === -1) return;
+
+    const reordered = [...songs];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved!);
+    utils.playlist.get.setData({ hash: initial.hash }, (current) =>
+      current ? { ...current, songs: reordered } : current,
+    );
+
+    moveMutation.mutate({ hash: playlist.hash, songId, toIndex: to });
+  }
+
   return (
     <main className="mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col gap-6 px-4 py-8 text-white md:h-[100dvh] md:flex-row md:items-start md:py-0">
       {/* Search on the left (below the playlist on narrow screens), scrolling
@@ -111,8 +151,46 @@ export default function PlaylistScene({
             {visibleSongs.map((song, i) => (
               <li
                 key={song.songId}
-                className="flex items-center gap-3 rounded-md bg-black/20 p-2"
+                draggable
+                onDragStart={(e) => {
+                  // Firefox only starts a drag once some data is set.
+                  e.dataTransfer.setData("text/plain", String(song.songId));
+                  e.dataTransfer.effectAllowed = "move";
+                  setDraggedId(song.songId);
+                }}
+                onDragEnd={() => {
+                  setDraggedId(null);
+                  setDragOverIndex(null);
+                }}
+                onDragOver={(e) => {
+                  if (draggedId === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDragOverIndex(i);
+                }}
+                onDragLeave={() =>
+                  setDragOverIndex((current) =>
+                    current === i ? null : current,
+                  )
+                }
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedId !== null) moveSong(draggedId, i);
+                  setDraggedId(null);
+                  setDragOverIndex(null);
+                }}
+                className={cn(
+                  "flex cursor-grab items-center gap-3 rounded-md bg-black/20 p-2 active:cursor-grabbing",
+                  draggedId === song.songId && "opacity-40",
+                  dragOverIndex === i &&
+                    draggedId !== song.songId &&
+                    "ring-2 ring-amber-400",
+                )}
               >
+                <GripVertical
+                  aria-hidden
+                  className="h-4 w-4 shrink-0 opacity-40"
+                />
                 <span className="w-6 shrink-0 text-right text-sm opacity-60">
                   {i + 1}
                 </span>
@@ -121,6 +199,7 @@ export default function PlaylistScene({
                   alt=""
                   width={80}
                   height={45}
+                  draggable={false}
                   className="shrink-0 rounded object-cover"
                 />
                 <span className="min-w-0 flex-1 truncate">
@@ -131,6 +210,28 @@ export default function PlaylistScene({
                     {song.duration}
                   </span>
                 )}
+                <div className="flex shrink-0 flex-col">
+                  <button
+                    type="button"
+                    aria-label={`Move ${decode(song.title)} up`}
+                    title="Move up"
+                    disabled={i === 0}
+                    onClick={() => moveSong(song.songId, i - 1)}
+                    className="rounded p-0.5 opacity-70 hover:bg-white/10 hover:opacity-100 disabled:opacity-20"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move ${decode(song.title)} down`}
+                    title="Move down"
+                    disabled={i === visibleSongs.length - 1}
+                    onClick={() => moveSong(song.songId, i + 1)}
+                    className="rounded p-0.5 opacity-70 hover:bg-white/10 hover:opacity-100 disabled:opacity-20"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
                 <Button
                   type="button"
                   variant="ghost"

@@ -208,6 +208,62 @@ export const playlistRouter = createTRPCRouter({
       });
     }),
 
+  /**
+   * Moves one song to `toIndex` (0 is the top) and renumbers the playlist.
+   * Anyone with the link can. Works from the order saved right now, so
+   * people reordering at once can't leave the list scrambled.
+   */
+  moveSong: publicProcedure
+    .input(
+      z.object({
+        hash: Hash,
+        songId: z.number().int(),
+        toIndex: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        // Lock the playlist row first, so concurrent moves run one after
+        // another and each reads the order the previous one saved.
+        const locked = await tx.playlist.updateMany({
+          where: { hash: input.hash },
+          data: { updatedAt: new Date() },
+        });
+        if (locked.count === 0) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Playlist not found.",
+          });
+        }
+
+        const songs = await tx.playlistSong.findMany({
+          where: { playlist: { hash: input.hash } },
+          orderBy: [{ position: "asc" }, { id: "asc" }],
+          select: { id: true },
+        });
+
+        const order = songs.map((song) => song.id);
+        const from = order.indexOf(input.songId);
+        // Removed by someone else in the meantime: nothing to move.
+        if (from === -1) return { moved: false };
+
+        const to = Math.min(input.toIndex, order.length - 1);
+        if (from === to) return { moved: false };
+
+        order.splice(from, 1);
+        order.splice(to, 0, input.songId);
+
+        // Renumber every song 0, 1, 2... in one statement.
+        await tx.$executeRaw`
+          UPDATE "PlaylistSong" AS s
+          SET "position" = (v.pos - 1)::int
+          FROM unnest(${order}::int[]) WITH ORDINALITY AS v(id, pos)
+          WHERE s.id = v.id`;
+
+        return { moved: true };
+      });
+    }),
+
   /** Removes one song from a playlist. Anyone with the link can. */
   removeSong: publicProcedure
     .input(z.object({ hash: Hash, songId: z.number().int() }))

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Download,
   GripVertical,
   Loader2,
   Trash2,
@@ -24,6 +25,7 @@ import { SongSearch } from "~/components/song-search";
 import { Button } from "~/components/ui/ui/button";
 import { Input } from "~/components/ui/ui/input";
 import { cn } from "~/lib/utils";
+import { playlistFileName, toPlaylistFile } from "~/utils/playlist-file";
 import type { RouterOutputs } from "~/trpc/react";
 import { api } from "~/trpc/react";
 
@@ -266,6 +268,19 @@ export default function PlaylistScene({
           hash={playlist.hash}
           name={playlist.name}
           stats={playlist}
+          onExport={() => {
+            // Built here from what's on screen: no server call needed.
+            const blob = new Blob(
+              [toPlaylistFile(playlist.name, visibleSongs)],
+              { type: "application/json" },
+            );
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = playlistFileName(playlist.name);
+            link.click();
+            URL.revokeObjectURL(url);
+          }}
           onRenamed={() => void refresh()}
           onDelete={() => setDeleteOpen(true)}
         />
@@ -325,6 +340,7 @@ function ManagePanel({
   stats,
   onRenamed,
   onDelete,
+  onExport,
 }: {
   hash: string;
   name: string;
@@ -339,6 +355,7 @@ function ManagePanel({
   >;
   onRenamed: (name: string) => void;
   onDelete: () => void;
+  onExport: () => void;
 }) {
   const rows: [string, string][] = [
     [
@@ -407,10 +424,20 @@ function ManagePanel({
         </Button>
       </form>
 
-      <Button variant="destructive" className="self-start" onClick={onDelete}>
-        <Trash2 className="mr-2 h-4 w-4" />
-        Delete playlist
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          title="Download the playlist's name and songs as a file, to keep or load into a party later"
+          onClick={onExport}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Export JSON
+        </Button>
+        <Button variant="destructive" onClick={onDelete}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete playlist
+        </Button>
+      </div>
     </section>
   );
 }

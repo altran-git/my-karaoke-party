@@ -10,7 +10,7 @@ import {
   getRecentParties,
   type RecentParty,
 } from "~/utils/recent-parties";
-import { playlistUrl } from "./playlist-dialogs";
+import { DeletePartyDialog } from "./delete-party-dialog";
 import { Input } from "./ui/ui/input";
 import { Button } from "./ui/ui/button";
 
@@ -27,67 +27,9 @@ export function ExistingParties() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
 
-  const deleteParty = api.party.delete.useMutation({
-    onSuccess: (_data, { hash }) => {
-      forgetParty(hash);
-      setRecent(getRecentParties());
-    },
-    onError: (err) => setListError(err.message),
-  });
-
-  const savePlaylist = api.playlist.saveFromParty.useMutation();
-
-  async function confirmDelete(p: RecentParty) {
-    if (!p.hostKey) return;
-    const ok = window.confirm(
-      `Permanently delete "${p.name}"?\n\n` +
-        "The song queue is erased, anyone still connected is sent back to " +
-        "the start page, and the party code can be used again. " +
-        "This can't be undone.",
-    );
-    if (!ok) return;
-
-    setListError(null);
-
-    // Deleting erases the list of songs sung, so offer to keep it first.
-    if (
-      window.confirm(
-        `Save the songs of "${p.name}" (the ones sung and the ones still ` +
-          "in the queue) as a playlist before deleting?",
-      )
-    ) {
-      try {
-        const playlist = await savePlaylist.mutateAsync({
-          partyHash: p.hash,
-          name: `${p.name} ${new Date().toLocaleDateString()}`,
-        });
-        // A prompt, so the link can be selected and copied.
-        window.prompt(
-          `Saved "${playlist.name}" (${playlist.songCount} ` +
-            `${playlist.songCount === 1 ? "song" : "songs"}). ` +
-            "It's under Load playlist, and at this link:",
-          playlistUrl(playlist.hash),
-        );
-      } catch (err) {
-        const code =
-          err && typeof err === "object" && "data" in err
-            ? (err.data as { code?: string } | undefined)?.code
-            : undefined;
-        // Nothing to save: go ahead and delete.
-        if (code !== "BAD_REQUEST" && code !== "NOT_FOUND") {
-          setListError(
-            "Couldn't save the songs, so the party wasn't deleted. " +
-              "Please try again.",
-          );
-          return;
-        }
-      }
-    }
-
-    deleteParty.mutate({ hash: p.hash, hostKey: p.hostKey });
-  }
+  // The party whose delete dialog is open.
+  const [toDelete, setToDelete] = useState<RecentParty | null>(null);
 
   function removeFromList(p: RecentParty) {
     if (
@@ -171,8 +113,7 @@ export function ExistingParties() {
                   type="button"
                   aria-label={`Permanently delete ${p.name}`}
                   title="Permanently delete this party"
-                  disabled={deleteParty.isPending || savePlaylist.isPending}
-                  onClick={() => void confirmDelete(p)}
+                  onClick={() => setToDelete(p)}
                   className="rounded p-1 text-red-300 opacity-70 hover:bg-white/10 hover:opacity-100 disabled:opacity-30"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -192,7 +133,16 @@ export function ExistingParties() {
         </ul>
       )}
 
-      {listError && <p className="text-sm text-red-300">{listError}</p>}
+      <DeletePartyDialog
+        party={toDelete}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setToDelete(null);
+        }}
+        onDeleted={(hash) => {
+          forgetParty(hash);
+          setRecent(getRecentParties());
+        }}
+      />
 
       <form onSubmit={openByCode} className="flex flex-col gap-1">
         <label htmlFor="party-code" className="text-sm opacity-80">

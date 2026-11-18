@@ -136,6 +136,29 @@ export default function PlayerScene({
 
   const currentVideo = playlist.find((video) => !video.playedAt);
   const nextVideos = playlist.filter((video) => !video.playedAt);
+
+  // The queue strip only scrolls sideways, but a mouse wheel scrolls up and
+  // down: turn vertical wheel movement into horizontal scrolling. React's
+  // onWheel is passive and can't preventDefault, so attach it by hand.
+  const queueScrollRef = useRef<HTMLDivElement>(null);
+  const hasQueue = nextVideos.length > 0;
+
+  useEffect(() => {
+    const el = queueScrollRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      if (el.scrollWidth <= el.clientWidth) return;
+
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [hasQueue]);
+
   currentVideoIdRef.current = currentVideo?.id ?? null;
 
   // On rejoin, the song that was on screen when the page opened waits for
@@ -410,7 +433,10 @@ export default function PlayerScene({
             </div>
             {nextVideos.length > 0 ? (
               <>
-                <div className="no-scrollbar flex h-full grow flex-row space-x-2 overflow-x-scroll">
+                <div
+                  ref={queueScrollRef}
+                  className="thin-scrollbar flex h-full min-w-0 grow flex-row space-x-2 overflow-x-auto pb-1"
+                >
                   {nextVideos.map((v, i) => {
                     // The first one is on screen right now: it stays put.
                     const isPlaying = i === 0;

@@ -169,4 +169,16 @@
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
   }
+  /* A slim, unobtrusive scrollbar for sideways strips */
+  .thin-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(100 116 139) transparent;
+  }
+  .thin-scrollbar::-webkit-scrollbar {
+    height: 6px;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgb(100 116 139);
+    border-radius: 9999px;
+  }
 }

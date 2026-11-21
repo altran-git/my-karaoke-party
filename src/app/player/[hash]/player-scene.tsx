@@ -383,8 +383,9 @@ export default function PlayerScene({
               {fullscreen ? <Minimize /> : <Maximize />}
             </Button>
             {currentVideo ? (
+              // No key here on purpose: the same Player (and YouTube iframe)
+              // is reused for every song. See the note in player.tsx.
               <Player
-                key={currentVideo.id}
                 video={
                   currentVideo.id === rejoinVideoId
                     ? { ...currentVideo, waitForPlay: true }

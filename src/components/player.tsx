@@ -39,6 +39,17 @@ export function Player({
   onPlayingChange,
 }: Props) {
   const playerRef = useRef<YouTubePlayer>(null);
+
+  // One YouTube player (one iframe) is created for the first song and kept
+  // for every song after it: new songs are loaded into it with
+  // loadVideoById. iPad and iPhone browsers (Safari, and Chrome too, since
+  // it uses Safari's engine there) only let a video start with sound in a
+  // player someone has tapped. A fresh iframe for each song would never
+  // have been tapped, so the queue would stop after every song. Changing
+  // react-youtube's videoId prop would also rebuild the iframe, so it only
+  // ever gets the first song's id.
+  const [initialVideo] = useState(video);
+  const loadedVideoIdRef = useRef(video.id);
   // Captions are turned off once per song, on its first play, so a guest who
   // turns them back on with the CC button keeps them across pause/resume.
   const captionsHandledRef = useRef(false);
@@ -113,6 +124,30 @@ export function Player({
     };
   }, [onSetPlayingRef, setPlaying, isReady]);
 
+  // Load each new song into the existing player.
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !isReady || loadedVideoIdRef.current === video.id) return;
+    loadedVideoIdRef.current = video.id;
+
+    // Start the new song's on-screen state over.
+    captionsHandledRef.current = false;
+    if (songInfoTimerRef.current) {
+      clearTimeout(songInfoTimerRef.current);
+      songInfoTimerRef.current = null;
+    }
+    setSongInfoTimeUp(false);
+    setShowOpenInYouTubeButton(false);
+    setIsPlaying(false);
+
+    if (video.waitForPlay) {
+      // Load it paused, for the host to start.
+      player.cueVideoById({ videoId: video.id, startSeconds: 0 });
+    } else {
+      player.loadVideoById({ videoId: video.id, startSeconds: 0 });
+    }
+  }, [video.id, video.waitForPlay, isReady]);
+
   const opts: YouTubeProps["opts"] = {
     playerVars: {
       // https://developers.google.com/youtube/player_parameters
@@ -121,7 +156,11 @@ export function Player({
       // song ends or is skipped. Browsers may still block this until someone
       // has clicked on the page. The first song of a playlist loaded into an
       // empty queue waits for the host to press play instead.
-      autoplay: video.waitForPlay ? 0 : 1,
+      // Only used for the first song: later ones are loaded by the effect
+      // above. Kept fixed so react-youtube never rebuilds the player.
+      autoplay: initialVideo.waitForPlay ? 0 : 1,
+      // Play inside the page on iPhone instead of in its own fullscreen view.
+      playsinline: 1,
       rel: 0,
       controls: 1,
       // Hide YouTube's fullscreen button: it fullscreens only the video and
@@ -191,7 +230,7 @@ export function Player({
     window.open(
       `https://www.youtube.com/watch?v=${video.id}#mykaraokeparty`,
       "_blank",
-      "fullscreen=yes"
+      "fullscreen=yes",
     );
 
     if (onPlayerEnd) {
@@ -199,74 +238,69 @@ export function Player({
     }
   };
 
-  if (showOpenInYouTubeButton) {
-    return (
-      <div
-        className={cn(
-          "mx-auto flex h-full w-full flex-col items-center justify-between space-y-6 p-4 pb-1 text-center",
-          isFullscreen && "bg-gradient"
-        )}
-      >
-        <div>
-          <h1 className="text-outline scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
-            {decode(video.title)}
-          </h1>
-          <h2 className="text-outline scroll-m-20 text-3xl font-bold tracking-tight lg:text-4xl">
-            <MicVocal className="mr-2 inline text-primary" size={32} />
-            {video.singerName}
-            <MicVocal
-              className="ml-2 inline scale-x-[-1] transform text-primary"
-              size={32}
-            />
-          </h2>
-        </div>
+  // Shown over the player (which stays mounted underneath, so the next song
+  // can still be loaded into it) when a video can't be embedded.
+  const cannotEmbedScreen = showOpenInYouTubeButton && (
+    <div className="bg-gradient absolute inset-0 z-20 mx-auto flex h-full w-full flex-col items-center justify-between space-y-6 p-4 pb-1 text-center">
+      <div>
+        <h1 className="text-outline scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {decode(video.title)}
+        </h1>
+        <h2 className="text-outline scroll-m-20 text-3xl font-bold tracking-tight lg:text-4xl">
+          <MicVocal className="mr-2 inline text-primary" size={32} />
+          {video.singerName}
+          <MicVocal
+            className="ml-2 inline scale-x-[-1] transform text-primary"
+            size={32}
+          />
+        </h2>
+      </div>
 
-        <div>
-          <h3 className="mb-2 scroll-m-20 text-2xl font-semibold tracking-tight animate-in fade-in zoom-in">
-            This video cannot be embedded. Click the button to open a new tab in
-            YouTube.
-          </h3>
+      <div>
+        <h3 className="mb-2 scroll-m-20 text-2xl font-semibold tracking-tight animate-in fade-in zoom-in">
+          This video cannot be embedded. Click the button to open a new tab in
+          YouTube.
+        </h3>
+        <Button
+          type="button"
+          className="w-fit self-center animate-in fade-in zoom-in"
+          onClick={() => openYouTubeTab()}
+        >
+          Play in YouTube
+          <Youtube className="ml-2" />
+        </Button>
+        <div className="mt-2">
           <Button
+            className="animate-in fade-in zoom-in"
+            variant={"secondary"}
             type="button"
-            className="w-fit self-center animate-in fade-in zoom-in"
-            onClick={() => openYouTubeTab()}
+            onClick={() => {
+              onPlayerEnd();
+            }}
           >
-            Play in YouTube
-            <Youtube className="ml-2" />
+            <SkipForward className="mr-2 h-5 w-5" />
+            Skip
           </Button>
-          <div className="mt-2">
-            <Button
-              className="animate-in fade-in zoom-in"
-              variant={"secondary"}
-              type="button"
-              onClick={() => {
-                onPlayerEnd();
-              }}
-            >
-              <SkipForward className="mr-2 h-5 w-5" />
-              Skip
-            </Button>
-          </div>
-        </div>
-
-        <div className="relative flex w-full basis-1/4 items-end text-center">
-          <QrCode url={joinPartyUrl} />
-          <a
-            href={joinPartyUrl}
-            target="_blank"
-            className="font-mono text-xl text-white pl-4"
-          >
-            {joinPartyUrl.split("//")[1]}
-          </a>
         </div>
       </div>
-    );
-  }
+
+      <div className="relative flex w-full basis-1/4 items-end text-center">
+        <QrCode url={joinPartyUrl} />
+        <a
+          href={joinPartyUrl}
+          target="_blank"
+          className="pl-4 font-mono text-xl text-white"
+        >
+          {joinPartyUrl.split("//")[1]}
+        </a>
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative z-0 h-full">
+      {cannotEmbedScreen}
       <YouTube
-        key={video.id}
         loading="eager"
         // className={`h-full w-full`}
         className={`h-full w-full animate-in fade-in ${
@@ -274,7 +308,7 @@ export function Player({
         }`}
         iframeClassName="w-full h-full"
         // iframeClassName="p2 fixed bottom-0 right-0 h-auto min-h-full w-auto min-w-full"
-        videoId={video.id}
+        videoId={initialVideo.id}
         opts={opts}
         onPlay={onPlayerPlay}
         onReady={onPlayerReady}
@@ -288,7 +322,7 @@ export function Player({
         className={cn(
           // pointer-events-none: clicks go through to YouTube's controls.
           "pointer-events-none absolute top-0 w-full text-center animate-in fade-in zoom-in",
-          isPlaying && songInfoTimeUp ? "hidden" : "block"
+          isPlaying && songInfoTimeUp ? "hidden" : "block",
         )}
       >
         <div
@@ -318,7 +352,7 @@ export function Player({
 
       {/* Sits in the middle of YouTube's control bar, below the seek bar.
           Clicks pass through, so the controls under it still work. */}
-      <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full text-outline bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
+      <div className="text-outline pointer-events-none absolute bottom-5 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
         {/* Only the text is faded, so the background stays as set above. */}
         <span className="opacity-60">
           {nextVideo ? (
@@ -341,11 +375,7 @@ export function Player({
           picture (overscan), so the code can still be scanned. size is
           smaller than the 128px default so it covers less of the lyrics. */}
       <div className="pointer-events-none absolute bottom-20 right-16 z-10 flex flex-col items-end">
-        <QrCode
-          url={joinPartyUrl}
-          size={100}
-          className="pointer-events-auto"
-        />
+        <QrCode url={joinPartyUrl} size={100} className="pointer-events-auto" />
 
         <div
           className={`pointer-events-auto pt-1 ${

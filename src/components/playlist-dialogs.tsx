@@ -177,7 +177,7 @@ function SongsToSavePreview({
           ? `${songs.length} ${songs.length === 1 ? "song" : "songs"} will be saved`
           : "Songs that will be saved"}
       </p>
-      <div className="max-h-56 overflow-y-auto rounded-md border">{body}</div>
+      <div className="max-h-48 overflow-y-auto rounded-md border">{body}</div>
     </div>
   );
 }
@@ -286,43 +286,6 @@ export function SavePlaylistDialog({
             }}
             className="flex flex-col gap-3"
           >
-            <fieldset className="flex flex-col gap-2 text-sm">
-              <legend className="mb-1 text-muted-foreground">
-                Songs to save (each song is saved once)
-              </legend>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includePlayed}
-                  onChange={(e) => {
-                    setIncludePlayed(e.target.checked);
-                    save.reset();
-                  }}
-                />
-                Songs already sung, in the order they were played
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includeQueued}
-                  onChange={(e) => {
-                    setIncludeQueued(e.target.checked);
-                    save.reset();
-                  }}
-                />
-                Songs in the queue, including the one playing now
-              </label>
-            </fieldset>
-            <SongsToSavePreview
-              songs={songsToSave}
-              loading={partySongs.isLoading}
-              error={partySongs.error?.message}
-              nothingPicked={!includePlayed && !includeQueued}
-              onRemove={(id) => {
-                setRemovedIds((ids) => [...ids, id]);
-                save.reset();
-              }}
-            />
             {ownPlaylists.length > 0 && (
               <fieldset className="flex flex-col gap-2 text-sm">
                 <legend className="mb-1 text-muted-foreground">Save as</legend>
@@ -389,6 +352,43 @@ export function SavePlaylistDialog({
                 />
               </>
             )}
+            <fieldset className="flex flex-col gap-2 text-sm">
+              <legend className="mb-1 text-muted-foreground">
+                Songs to save (each song is saved once)
+              </legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includePlayed}
+                  onChange={(e) => {
+                    setIncludePlayed(e.target.checked);
+                    save.reset();
+                  }}
+                />
+                Songs already sung, in the order they were played
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includeQueued}
+                  onChange={(e) => {
+                    setIncludeQueued(e.target.checked);
+                    save.reset();
+                  }}
+                />
+                Songs in the queue, including the one playing now
+              </label>
+            </fieldset>
+            <SongsToSavePreview
+              songs={songsToSave}
+              loading={partySongs.isLoading}
+              error={partySongs.error?.message}
+              nothingPicked={!includePlayed && !includeQueued}
+              onRemove={(id) => {
+                setRemovedIds((ids) => [...ids, id]);
+                save.reset();
+              }}
+            />
             {save.error && (
               <p className="text-sm text-red-400">{save.error.message}</p>
             )}

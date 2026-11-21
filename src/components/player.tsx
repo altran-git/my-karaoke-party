@@ -338,7 +338,7 @@ export function Player({
             )}
           </span>
         </div>
-        <QrCode url={joinPartyUrl} size={64} className="shrink-0 p-1" />
+        <QrCode url={joinPartyUrl} size={48} className="shrink-0 p-1" />
       </div>
 
       {/* Skip, just above YouTube's seek bar. right-16 keeps it clear of the

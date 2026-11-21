@@ -20,16 +20,17 @@ export type SuggestedSong = {
 };
 
 /**
- * How many suggestions to return. More than the screens show, so the
- * browser can drop songs already played or queued and still have enough.
+ * How many suggestions to return. Far more than the screens show, so the
+ * browser can drop songs already played or queued, and pick a different
+ * mix each time someone presses Suggest.
  */
-const CANDIDATES = 40;
+const CANDIDATES = 120;
 
 /** Playlists looked at per request, newest first. Keeps big libraries fast. */
 const MAX_RELATED_PLAYLISTS = 50;
 
 /** Most-shared songs looked at to fill up the list. */
-const MAX_POPULAR = 60;
+const MAX_POPULAR = 150;
 
 type SongRow = {
   videoId: string;

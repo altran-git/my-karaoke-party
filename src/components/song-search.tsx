@@ -28,15 +28,18 @@ export function SongSearch({
   const [canFetch, setCanFetch] = useState(false);
 
   // Suggest shows songs from the saved playlists where the search results
-  // go; searching swaps them back for the results.
+  // go; searching swaps them back for the results. Every press of Suggest
+  // deals a new mix of songs.
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionMix, setSuggestionMix] = useState(0);
   // Suggested songs added from this list stay in it, with a check.
   const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
 
   const suggestions = useSongSuggestions(playlist, {
     enabled: showSuggestions,
-    count: 10,
+    count: 25,
     keepIds: addedSuggestions,
+    shuffle: suggestionMix,
   });
 
   const { data, isError, refetch, isLoading, isFetched } =
@@ -84,11 +87,11 @@ export function SongSearch({
           <Button
             type="button"
             variant={showSuggestions ? "default" : "secondary"}
-            title="Suggest songs from the saved playlists"
-            aria-pressed={showSuggestions}
+            title="Suggest songs from the saved playlists (press again for different ones)"
             onClick={() => {
               setAddedSuggestions([]);
-              setShowSuggestions((shown) => !shown);
+              setSuggestionMix((mix) => mix + 1);
+              setShowSuggestions(true);
             }}
           >
             <Sparkles className="mr-1.5 h-5 w-5" />
@@ -108,7 +111,6 @@ export function SongSearch({
           ) : suggestions.songs.length > 0 ? (
             <SuggestionList
               songs={suggestions.songs}
-              heading={suggestions.heading}
               isAdded={(id) =>
                 !!playlist.find((v) => v.id === id && !v.playedAt)
               }

@@ -3,7 +3,7 @@
 import { decode } from "html-entities";
 import { Check, Plus } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 import { api } from "~/trpc/react";
 import type { SuggestedSong } from "~/server/suggestions";
@@ -29,11 +29,18 @@ export function useSongSuggestions(
     enabled = true,
     count,
     keepIds = [],
+    shuffle = 0,
   }: {
     enabled?: boolean;
     count: number;
     /** Songs to keep listed even once they're queued (just added here). */
     keepIds?: string[];
+    /**
+     * 0 lists the best matches in order. Any other number picks a random
+     * mix (better matches more likely), avoiding the songs shown last
+     * time; change it to get a new mix.
+     */
+    shuffle?: number;
   },
 ) {
   const played = playlist
@@ -59,9 +66,36 @@ export function useSongSuggestions(
     },
   );
 
+  // Songs on screen, so the next mix can leave them out.
+  const shownRef = useRef<string[]>([]);
+
+  const pool = useMemo(() => {
+    const ranked = data ?? [];
+    if (!shuffle) return ranked;
+
+    // Weighted random order (Efraimidis-Spirakis): every song can come up,
+    // but the better matches near the top of the ranking come up more.
+    // Songs shown last time go to the back.
+    const shownBefore = new Set(shownRef.current);
+    return ranked
+      .map((song, rank) => ({
+        song,
+        key:
+          Math.random() ** (rank + 10) - (shownBefore.has(song.id) ? 1 : 0),
+      }))
+      .sort((a, b) => b.key - a.key)
+      .map(({ song }) => song);
+    // shownRef is read only when a new mix is asked for, on purpose.
+  }, [data, shuffle]);
+
   const inParty = new Set(playlist.map((v) => v.id));
   for (const id of keepIds) inParty.delete(id);
-  const songs = (data ?? []).filter((s) => !inParty.has(s.id)).slice(0, count);
+  const songs = pool.filter((s) => !inParty.has(s.id)).slice(0, count);
+
+  const shownKey = songs.map((s) => s.id).join(",");
+  useEffect(() => {
+    if (enabled && shownKey) shownRef.current = shownKey.split(",");
+  }, [enabled, shownKey]);
 
   // Name the last song sung if the suggestions grew out of it.
   const lastSong = played[0];
@@ -167,21 +201,18 @@ export function TvSuggestions({
  */
 export function SuggestionList({
   songs,
-  heading,
   isAdded,
   onAdd,
   className,
 }: {
   songs: SuggestedSong[];
-  heading: string;
   isAdded: (id: string) => boolean;
   onAdd: AddSong;
   className?: string;
 }) {
   return (
     <section className={cn("text-left", className)}>
-      <h2 className="text-lg font-bold">Suggested songs</h2>
-      <p className="mb-3 truncate text-sm opacity-75">{heading}</p>
+      <h2 className="mb-3 text-lg font-bold">Suggested songs</h2>
       <ul className="flex flex-col gap-2">
         {songs.map((song) => {
           const added = isAdded(song.id);

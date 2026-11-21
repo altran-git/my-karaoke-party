@@ -113,17 +113,13 @@ function SongsToSavePreview({
   loading,
   error,
   nothingPicked,
-  removedCount,
   onRemove,
-  onRestore,
 }: {
   songs: { id: string; title: string; coverUrl: string }[];
   loading: boolean;
   error?: string;
   nothingPicked: boolean;
-  removedCount: number;
   onRemove: (id: string) => void;
-  onRestore: () => void;
 }) {
   let body: ReactNode;
   if (nothingPicked) {
@@ -176,22 +172,11 @@ function SongsToSavePreview({
 
   return (
     <div className="flex flex-col gap-1 text-sm">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-muted-foreground">
-          {!nothingPicked && !loading && !error
-            ? `${songs.length} ${songs.length === 1 ? "song" : "songs"} will be saved`
-            : "Songs that will be saved"}
-        </p>
-        {removedCount > 0 && (
-          <button
-            type="button"
-            onClick={onRestore}
-            className="text-xs underline underline-offset-2 hover:text-foreground"
-          >
-            {`Put back ${removedCount} removed ${removedCount === 1 ? "song" : "songs"}`}
-          </button>
-        )}
-      </div>
+      <p className="text-muted-foreground">
+        {!nothingPicked && !loading && !error
+          ? `${songs.length} ${songs.length === 1 ? "song" : "songs"} will be saved`
+          : "Songs that will be saved"}
+      </p>
       <div className="max-h-56 overflow-y-auto rounded-md border">{body}</div>
     </div>
   );
@@ -333,13 +318,8 @@ export function SavePlaylistDialog({
               loading={partySongs.isLoading}
               error={partySongs.error?.message}
               nothingPicked={!includePlayed && !includeQueued}
-              removedCount={removedIds.length}
               onRemove={(id) => {
                 setRemovedIds((ids) => [...ids, id]);
-                save.reset();
-              }}
-              onRestore={() => {
-                setRemovedIds([]);
                 save.reset();
               }}
             />

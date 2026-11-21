@@ -14,6 +14,7 @@ import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import type { db as Db } from "~/server/db";
 import { suggestSongs } from "~/server/suggestions";
 import { fetchPartyServer } from "~/server/party-server";
+import { pickSongsToSave, splitPartySongs } from "~/utils/party-songs";
 import {
   checkHostKey,
   generatePlaylistHash,
@@ -27,6 +28,28 @@ const PlaylistName = z.string().trim().min(1).max(100);
 const Songs = z.array(PlaylistSongInput).max(MAX_PLAYLIST_SONGS);
 const Hash = z.string().min(1).max(100);
 const Secret = z.string().min(1).max(200);
+
+/** Reads a party's live state from the party server, to save its songs. */
+async function readPartySongs(partyHash: string) {
+  const res = await fetchPartyServer(partyHash, {
+    method: "GET",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    log.error("Couldn't read party to save it", {
+      hash: partyHash,
+      status: res.status,
+    });
+    throw new TRPCError({
+      code: res.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+      message:
+        res.status === 404
+          ? "This party's songs are no longer available."
+          : "Couldn't read the party's songs. Please try again.",
+    });
+  }
+  return (await res.json()) as KaraokeParty;
+}
 
 function toSongRows(songs: PlaylistSongInput[]) {
   return songs.map((song, position) => ({
@@ -503,6 +526,23 @@ export const playlistRouter = createTRPCRouter({
    * Saves a party's songs (sung, queued or both) as a new playlist. Open to
    * anyone with the party code.
    */
+  /**
+   * A party's songs as "Save as playlist" offers them, so the dialog can show
+   * what will be saved before saving it.
+   */
+  partySongs: publicProcedure
+    .input(z.object({ partyHash: Hash }))
+    .query(async ({ ctx, input }) => {
+      const found = await ctx.db.party.findUnique({
+        where: { hash: input.partyHash },
+        select: { hash: true },
+      });
+      if (!found?.hash) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Party not found." });
+      }
+      return splitPartySongs(await readPartySongs(found.hash));
+    }),
+
   saveFromParty: publicProcedure
     .input(
       z
@@ -551,61 +591,10 @@ export const playlistRouter = createTRPCRouter({
           )
         : null;
 
-      const res = await fetchPartyServer(party.hash, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        log.error("Couldn't read party to save it", {
-          hash: party.hash,
-          status: res.status,
-        });
-        throw new TRPCError({
-          code: res.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
-          message:
-            res.status === 404
-              ? "This party's songs are no longer available."
-              : "Couldn't read the party's songs. Please try again.",
-        });
-      }
-
-      const karaokeParty = (await res.json()) as KaraokeParty;
-
-      // Parties from before the history log only have the played songs that
-      // are still in the queue.
-      const played = !input.includePlayed
-        ? []
-        : karaokeParty.history?.length
-          ? karaokeParty.history
-          : karaokeParty.playlist
-              .filter((v) => v.playedAt)
-              .sort(
-                (a, b) =>
-                  new Date(a.playedAt!).getTime() -
-                  new Date(b.playedAt!).getTime(),
-              );
-
-      const queued = input.includeQueued
-        ? karaokeParty.playlist.filter((v) => !v.playedAt)
-        : [];
-
-      // Each song once: first the songs sung, in the order they were played,
-      // then the queue in its current order.
-      const seen = new Set<string>();
-      const songs: PlaylistSongInput[] = [];
-      for (const video of [...played, ...queued]) {
-        if (seen.has(video.id)) continue;
-        seen.add(video.id);
-
-        const song = PlaylistSongInput.safeParse({
-          id: video.id,
-          title: video.title,
-          coverUrl: video.coverUrl,
-          duration: video.duration ?? undefined,
-        });
-        if (song.success) songs.push(song.data);
-        if (songs.length >= MAX_PLAYLIST_SONGS) break;
-      }
+      const songs = pickSongsToSave(
+        splitPartySongs(await readPartySongs(party.hash)),
+        input,
+      );
 
       if (songs.length === 0) {
         throw new TRPCError({
@@ -803,9 +792,7 @@ export const playlistRouter = createTRPCRouter({
   suggestions: publicProcedure
     .input(
       z.object({
-        recentIds: z
-          .array(z.string().regex(/^[a-zA-Z0-9_-]{11}$/))
-          .max(10),
+        recentIds: z.array(z.string().regex(/^[a-zA-Z0-9_-]{11}$/)).max(10),
       }),
     )
     .query(({ ctx, input }) => suggestSongs(ctx.db, input.recentIds)),

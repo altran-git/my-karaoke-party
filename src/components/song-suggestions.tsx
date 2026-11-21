@@ -10,8 +10,8 @@ import type { SuggestedSong } from "~/server/suggestions";
 
 type QueueItem = {
   id: string;
-  title: string;
-  playedAt: Date | string | null;
+  title?: string;
+  playedAt?: Date | string | null;
 };
 
 type AddSong = (videoId: string, title: string, coverUrl: string) => void;
@@ -25,7 +25,16 @@ const RECENT_SONGS = 10;
  */
 export function useSongSuggestions(
   playlist: QueueItem[],
-  { enabled = true, count }: { enabled?: boolean; count: number },
+  {
+    enabled = true,
+    count,
+    keepIds = [],
+  }: {
+    enabled?: boolean;
+    count: number;
+    /** Songs to keep listed even once they're queued (just added here). */
+    keepIds?: string[];
+  },
 ) {
   const played = playlist
     .filter((v) => v.playedAt)
@@ -39,7 +48,7 @@ export function useSongSuggestions(
     RECENT_SONGS,
   );
 
-  const { data } = api.playlist.suggestions.useQuery(
+  const { data, isLoading, isError } = api.playlist.suggestions.useQuery(
     { recentIds },
     {
       enabled,
@@ -51,6 +60,7 @@ export function useSongSuggestions(
   );
 
   const inParty = new Set(playlist.map((v) => v.id));
+  for (const id of keepIds) inParty.delete(id);
   const songs = (data ?? []).filter((s) => !inParty.has(s.id)).slice(0, count);
 
   // Name the last song sung if the suggestions grew out of it.
@@ -60,9 +70,11 @@ export function useSongSuggestions(
 
   return {
     songs,
+    isLoading: enabled && isLoading,
+    isError,
     heading: songs.some((s) => s.reason === "related")
       ? basedOnLast
-        ? `Because you sang ${decode(lastSong.title)}`
+        ? `Because you sang ${decode(lastSong.title ?? "")}`
         : "Based on tonight's songs"
       : "Popular in your playlists",
   };
@@ -149,29 +161,30 @@ export function TvSuggestions({
   );
 }
 
-/** List of suggestions for a guest's phone. */
-export function PhoneSuggestions({
+/**
+ * Suggestions as a list, shown in place of search results when someone
+ * presses Suggest. `isAdded` marks songs already put in the queue.
+ */
+export function SuggestionList({
   songs,
   heading,
+  isAdded,
   onAdd,
   className,
 }: {
   songs: SuggestedSong[];
   heading: string;
+  isAdded: (id: string) => boolean;
   onAdd: AddSong;
   className?: string;
 }) {
-  const justAdded = useJustAdded();
-
-  if (songs.length === 0) return null;
-
   return (
     <section className={cn("text-left", className)}>
       <h2 className="text-lg font-bold">Suggested songs</h2>
       <p className="mb-3 truncate text-sm opacity-75">{heading}</p>
       <ul className="flex flex-col gap-2">
         {songs.map((song) => {
-          const added = justAdded.has(song.id);
+          const added = isAdded(song.id);
           const title = decode(song.title);
 
           return (
@@ -195,10 +208,7 @@ export function PhoneSuggestions({
                 type="button"
                 aria-label={added ? "Added" : `Add ${title}`}
                 disabled={added}
-                onClick={() => {
-                  justAdded.add(song.id);
-                  onAdd(song.id, song.title, song.coverUrl);
-                }}
+                onClick={() => onAdd(song.id, song.title, song.coverUrl)}
                 className={cn(
                   "shrink-0 rounded-full p-2 text-white",
                   added ? "bg-emerald-600" : "bg-primary hover:opacity-90",

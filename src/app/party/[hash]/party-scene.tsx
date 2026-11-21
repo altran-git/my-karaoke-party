@@ -9,10 +9,6 @@ import { env } from "~/env";
 import { readLocalStorageValue, useLocalStorage } from "@mantine/hooks";
 import { SongSearch } from "~/components/song-search";
 import {
-  PhoneSuggestions,
-  useSongSuggestions,
-} from "~/components/song-suggestions";
-import {
   ChevronDown,
   ChevronUp,
   ChevronsUp,
@@ -155,12 +151,6 @@ export function PartyScene({
   const nextVideos = playlist.filter((video) => !video.playedAt);
   const nextVideo = nextVideos[0] ?? null;
 
-  // With nothing left to sing, suggest songs from the saved playlists.
-  const suggestions = useSongSuggestions(playlist, {
-    enabled: !nextVideo,
-    count: 6,
-  });
-
   /** Stops the song on screen, drops it from the queue and plays `videoId` now. */
   const playNow = (videoId: string) => {
     const current = nextVideo;
@@ -219,16 +209,6 @@ export function PartyScene({
         <div className="mt-5">
           <SongSearch onVideoAdded={addSong} playlist={playlist} />
         </div>
-
-        {!nextVideo && (
-          <PhoneSuggestions
-            // mb-10 keeps the last song clear of the bottom queue bar.
-            className="mb-10 mt-6"
-            songs={suggestions.songs}
-            heading={suggestions.heading}
-            onAdd={addSong}
-          />
-        )}
       </div>
 
       <div className="fixed bottom-0 z-50 flex w-full flex-row items-start gap-2 bg-primary p-2 text-primary-foreground text-white">

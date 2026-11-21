@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "~/trpc/react";
-import { Plus, Search, Check, Loader2, Frown } from "lucide-react";
+import { Plus, Search, Check, Loader2, Frown, Sparkles } from "lucide-react";
 import { PreviewPlayer } from "./preview-player";
 import { removeBracketedContent } from "~/utils/string";
 import { decode } from "html-entities";
@@ -9,16 +9,35 @@ import { Button } from "./ui/ui/button";
 import { Skeleton } from "./ui/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "./ui/ui/alert";
 import { PoweredByYouTube } from "./powered-by-youtube";
+import { SuggestionList, useSongSuggestions } from "./song-suggestions";
 
 type Props = {
   onVideoAdded: (videoId: string, title: string, coverUrl: string) => void;
   /** Songs already added, shown with a check instead of a + button. */
-  playlist: { id: string; playedAt?: Date | null }[];
+  playlist: { id: string; title?: string; playedAt?: Date | string | null }[];
+  /** Show the Suggest button (songs from the saved playlists). */
+  showSuggest?: boolean;
 };
 
-export function SongSearch({ onVideoAdded, playlist }: Props) {
+export function SongSearch({
+  onVideoAdded,
+  playlist,
+  showSuggest = true,
+}: Props) {
   const [videoInputValue, setVideoInputValue] = useState("");
   const [canFetch, setCanFetch] = useState(false);
+
+  // Suggest shows songs from the saved playlists where the search results
+  // go; searching swaps them back for the results.
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  // Suggested songs added from this list stay in it, with a check.
+  const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
+
+  const suggestions = useSongSuggestions(playlist, {
+    enabled: showSuggestions,
+    count: 10,
+    keepIds: addedSuggestions,
+  });
 
   const { data, isError, refetch, isLoading, isFetched } =
     api.youtube.search.useQuery(
@@ -34,6 +53,7 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
     <form
       onSubmit={async (e) => {
         e.preventDefault();
+        setShowSuggestions(false);
         await refetch();
         setCanFetch(false);
       }}
@@ -60,9 +80,58 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
             <Search className="mx-1 h-6 w-6" />
           )}
         </Button>
+        {showSuggest && (
+          <Button
+            type="button"
+            variant={showSuggestions ? "default" : "secondary"}
+            title="Suggest songs from the saved playlists"
+            aria-pressed={showSuggestions}
+            onClick={() => {
+              setAddedSuggestions([]);
+              setShowSuggestions((shown) => !shown);
+            }}
+          >
+            <Sparkles className="mr-1.5 h-5 w-5" />
+            Suggest
+          </Button>
+        )}
       </div>
 
-      {isError && (
+      {showSuggestions && (
+        <div className="mb-10 mt-5">
+          {suggestions.isLoading ? (
+            <div className="flex flex-col space-y-2">
+              <Skeleton className="h-16 w-full rounded-lg" />
+              <Skeleton className="h-16 w-full rounded-lg" />
+              <Skeleton className="h-16 w-full rounded-lg" />
+            </div>
+          ) : suggestions.songs.length > 0 ? (
+            <SuggestionList
+              songs={suggestions.songs}
+              heading={suggestions.heading}
+              isAdded={(id) =>
+                !!playlist.find((v) => v.id === id && !v.playedAt)
+              }
+              onAdd={(id, title, coverUrl) => {
+                setAddedSuggestions((ids) => [...ids, id]);
+                onVideoAdded(id, title, coverUrl);
+              }}
+            />
+          ) : (
+            <Alert>
+              <Frown className="h-4 w-4" />
+              <AlertTitle>No suggestions yet</AlertTitle>
+              <AlertDescription>
+                {suggestions.isError
+                  ? "Couldn't load suggestions. Try again later."
+                  : "Suggestions come from saved playlists. Save a playlist, or search for a song above."}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
+      {!showSuggestions && isError && (
         <Alert variant={"destructive"} className="mt-4 bg-red-500 text-white">
           <Frown className="h-4 w-4" color="white" />
           <AlertTitle>Error!</AlertTitle>
@@ -73,7 +142,7 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
         </Alert>
       )}
 
-      {isFetched && !isError && !data?.length && (
+      {!showSuggestions && isFetched && !isError && !data?.length && (
         <Alert className="mt-4">
           <Frown className="h-4 w-4" />
           <AlertTitle>Nothing found!</AlertTitle>
@@ -83,7 +152,7 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
         </Alert>
       )}
 
-      {isLoading && (
+      {!showSuggestions && isLoading && (
         <div className="my-5 flex flex-col space-y-5 overflow-hidden">
           <Skeleton className="h-48 w-full rounded-xl" />
 
@@ -97,7 +166,7 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
         </div>
       )}
 
-      {data && (
+      {!showSuggestions && data && (
         <div className="my-5 flex flex-col space-y-5 overflow-hidden">
           {data.map((video) => {
             const alreadyAdded = !!playlist.find(
@@ -109,7 +178,9 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
             return (
               <div
                 key={video.id.videoId}
-                className={"relative h-48 overflow-hidden rounded-lg animate-in fade-in"}
+                className={
+                  "relative h-48 overflow-hidden rounded-lg animate-in fade-in"
+                }
               >
                 <PreviewPlayer
                   key={video.id.videoId}
@@ -125,7 +196,7 @@ export function SongSearch({ onVideoAdded, playlist }: Props) {
                   </p>
                 </div>
 
-                <div className="absolute bottom-3 right-3 z-30 opacity-100 w-full flex justify-between">
+                <div className="absolute bottom-3 right-3 z-30 flex w-full justify-between opacity-100">
                   <div>
                     <p className="bg-black bg-opacity-70 p-2 pl-5 text-sm text-white">
                       {video.snippet.channelTitle}

@@ -135,6 +135,7 @@ export default function PlaylistScene({
             {addSong.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           </h2>
           <SongSearch
+            showSuggest={false}
             playlist={songs.map((song) => ({ id: song.id }))}
             onVideoAdded={(id, title, coverUrl) =>
               addSong.mutate({

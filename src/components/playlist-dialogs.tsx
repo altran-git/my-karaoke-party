@@ -2,9 +2,9 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDebouncedValue } from "@mantine/hooks";
-import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
+import { Check, Copy, Loader2, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { LoadMode } from "party/types";
 import { cn } from "~/lib/utils";
@@ -13,6 +13,7 @@ import {
   MAX_PLAYLIST_FILE_BYTES,
   parsePlaylistFile,
 } from "~/utils/playlist-file";
+import { pickSongsToSave } from "~/utils/party-songs";
 import { rememberParty } from "~/utils/recent-parties";
 import { getUrl } from "~/utils/url";
 import { Button } from "./ui/ui/button";
@@ -106,6 +107,81 @@ type PartyHostProps = {
   hostKey: string;
 };
 
+/** The songs "Save as playlist" will save, with the current choices. */
+function SongsToSavePreview({
+  songs,
+  loading,
+  error,
+  nothingPicked,
+  onRemove,
+}: {
+  songs: { id: string; title: string; coverUrl: string }[];
+  loading: boolean;
+  error?: string;
+  nothingPicked: boolean;
+  onRemove: (id: string) => void;
+}) {
+  let body: ReactNode;
+  if (nothingPicked) {
+    body = (
+      <p className="p-3 text-muted-foreground">
+        Pick songs already sung, songs in the queue, or both.
+      </p>
+    );
+  } else if (loading) {
+    body = (
+      <p className="flex items-center gap-2 p-3 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading songs…
+      </p>
+    );
+  } else if (error) {
+    body = <p className="p-3 text-red-400">{error}</p>;
+  } else if (songs.length === 0) {
+    body = <p className="p-3 text-muted-foreground">No songs to save yet.</p>;
+  } else {
+    body = (
+      <ol className="divide-y">
+        {songs.map((song, i) => (
+          <li key={song.id} className="flex items-center gap-2 px-2 py-1.5">
+            <span className="text-xs w-6 shrink-0 text-right text-muted-foreground">
+              {i + 1}
+            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={song.coverUrl}
+              alt=""
+              className="h-8 w-12 shrink-0 rounded object-cover"
+            />
+            <span className="min-w-0 grow truncate" title={song.title}>
+              {song.title}
+            </span>
+            <button
+              type="button"
+              onClick={() => onRemove(song.id)}
+              aria-label={`Remove “${song.title}” from the playlist`}
+              title="Remove from the playlist"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <p className="text-muted-foreground">
+        {!nothingPicked && !loading && !error
+          ? `${songs.length} ${songs.length === 1 ? "song" : "songs"} will be saved`
+          : "Songs that will be saved"}
+      </p>
+      <div className="max-h-48 overflow-y-auto rounded-md border">{body}</div>
+    </div>
+  );
+}
+
 /** Saves the songs played so far at the party as a new playlist. */
 export function SavePlaylistDialog({
   open,
@@ -121,6 +197,8 @@ export function SavePlaylistDialog({
   const [name, setName] = useState(defaultName);
   const [includePlayed, setIncludePlayed] = useState(true);
   const [includeQueued, setIncludeQueued] = useState(true);
+  // YouTube ids of songs removed from the list to save.
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
   // Hash of the playlist to overwrite, or "" to save a new one.
   const [overwriteHash, setOverwriteHash] = useState("");
 
@@ -133,6 +211,26 @@ export function SavePlaylistDialog({
   );
   const ownPlaylists = overwritable.data ?? [];
   const overwriting = overwriteHash !== "";
+
+  // The party's songs, read fresh each time the dialog opens, to preview
+  // exactly what will be saved.
+  const partySongs = api.playlist.partySongs.useQuery(
+    { partyHash },
+    {
+      enabled: open,
+      refetchOnWindowFocus: false,
+      refetchOnMount: "always",
+      staleTime: 0,
+      retry: false,
+    },
+  );
+  const songsToSave = partySongs.data
+    ? pickSongsToSave(partySongs.data, {
+        includePlayed,
+        includeQueued,
+        excludeIds: removedIds,
+      })
+    : [];
 
   const save = api.playlist.saveFromParty.useMutation({
     onSuccess: (playlist) => {
@@ -155,6 +253,7 @@ export function SavePlaylistDialog({
       setName(defaultName);
       setIncludePlayed(true);
       setIncludeQueued(true);
+      setRemovedIds([]);
       setOverwriteHash("");
       save.reset();
     }
@@ -181,38 +280,12 @@ export function SavePlaylistDialog({
                   : name,
                 includePlayed,
                 includeQueued,
+                excludeIds: removedIds,
                 ...(overwriting ? { overwriteHash, hostKey } : {}),
               });
             }}
             className="flex flex-col gap-3"
           >
-            <fieldset className="flex flex-col gap-2 text-sm">
-              <legend className="mb-1 text-muted-foreground">
-                Songs to save (each song is saved once)
-              </legend>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includePlayed}
-                  onChange={(e) => {
-                    setIncludePlayed(e.target.checked);
-                    save.reset();
-                  }}
-                />
-                Songs already sung, in the order they were played
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includeQueued}
-                  onChange={(e) => {
-                    setIncludeQueued(e.target.checked);
-                    save.reset();
-                  }}
-                />
-                Songs in the queue, including the one playing now
-              </label>
-            </fieldset>
             {ownPlaylists.length > 0 && (
               <fieldset className="flex flex-col gap-2 text-sm">
                 <legend className="mb-1 text-muted-foreground">Save as</legend>
@@ -279,6 +352,43 @@ export function SavePlaylistDialog({
                 />
               </>
             )}
+            <fieldset className="flex flex-col gap-2 text-sm">
+              <legend className="mb-1 text-muted-foreground">
+                Songs to save (each song is saved once)
+              </legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includePlayed}
+                  onChange={(e) => {
+                    setIncludePlayed(e.target.checked);
+                    save.reset();
+                  }}
+                />
+                Songs already sung, in the order they were played
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includeQueued}
+                  onChange={(e) => {
+                    setIncludeQueued(e.target.checked);
+                    save.reset();
+                  }}
+                />
+                Songs in the queue, including the one playing now
+              </label>
+            </fieldset>
+            <SongsToSavePreview
+              songs={songsToSave}
+              loading={partySongs.isLoading}
+              error={partySongs.error?.message}
+              nothingPicked={!includePlayed && !includeQueued}
+              onRemove={(id) => {
+                setRemovedIds((ids) => [...ids, id]);
+                save.reset();
+              }}
+            />
             {save.error && (
               <p className="text-sm text-red-400">{save.error.message}</p>
             )}
@@ -293,7 +403,8 @@ export function SavePlaylistDialog({
                 disabled={
                   save.isPending ||
                   (!overwriting && !name.trim()) ||
-                  (!includePlayed && !includeQueued)
+                  (!includePlayed && !includeQueued) ||
+                  (partySongs.isSuccess && songsToSave.length === 0)
                 }
               >
                 {save.isPending && (

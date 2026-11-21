@@ -29,6 +29,10 @@ import { toast } from "sonner";
 import { EmptyPlayer } from "~/components/empty-player";
 import { Player } from "~/components/player";
 import { SongSearch } from "~/components/song-search";
+import {
+  TvSuggestions,
+  useSongSuggestions,
+} from "~/components/song-suggestions";
 import { Button } from "~/components/ui/ui/button";
 import { env } from "~/env";
 import { cn } from "~/lib/utils";
@@ -284,6 +288,13 @@ export default function PlayerScene({
 
   const joinPartyUrl = getUrl(`/join/${party.hash}`);
 
+  // Like YouTube's end screen: when the queue runs out, offer songs from
+  // the saved playlists that go with what was just sung.
+  const suggestions = useSongSuggestions(playlist, {
+    enabled: !currentVideo,
+    count: 8,
+  });
+
   return (
     <div className="flex h-screen w-full flex-row flex-nowrap">
       <div className="grow-0 basis-1/3 overflow-y-auto border-r border-slate-500 px-4">
@@ -407,6 +418,15 @@ export default function PlayerScene({
               <EmptyPlayer
                 joinPartyUrl={joinPartyUrl}
                 className={fullscreen ? "bg-gradient" : ""}
+                suggestions={
+                  suggestions.songs.length > 0 ? (
+                    <TvSuggestions
+                      songs={suggestions.songs}
+                      heading={suggestions.heading}
+                      onAdd={addSong}
+                    />
+                  ) : undefined
+                }
               />
             )}
           </div>

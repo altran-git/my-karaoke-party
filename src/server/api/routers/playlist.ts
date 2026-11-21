@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import type { db as Db } from "~/server/db";
+import { suggestSongs } from "~/server/suggestions";
 import { fetchPartyServer } from "~/server/party-server";
 import {
   checkHostKey,
@@ -792,4 +793,20 @@ export const playlistRouter = createTRPCRouter({
       });
       return result;
     }),
+
+  /**
+   * Songs to sing next, picked from saved playlists. Songs that share
+   * playlists with `recentIds` (the songs just sung, newest first) rank
+   * highest; songs found in many playlists fill the rest. The caller
+   * leaves out songs already played or queued.
+   */
+  suggestions: publicProcedure
+    .input(
+      z.object({
+        recentIds: z
+          .array(z.string().regex(/^[a-zA-Z0-9_-]{11}$/))
+          .max(10),
+      }),
+    )
+    .query(({ ctx, input }) => suggestSongs(ctx.db, input.recentIds)),
 });

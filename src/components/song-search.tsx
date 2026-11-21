@@ -37,7 +37,7 @@ export function SongSearch({
 
   const suggestions = useSongSuggestions(playlist, {
     enabled: showSuggestions,
-    count: 25,
+    count: 5,
     keepIds: addedSuggestions,
     shuffle: suggestionMix,
   });

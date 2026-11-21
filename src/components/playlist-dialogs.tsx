@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDebouncedValue } from "@mantine/hooks";
-import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
+import { Check, Copy, Loader2, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -113,11 +113,17 @@ function SongsToSavePreview({
   loading,
   error,
   nothingPicked,
+  removedCount,
+  onRemove,
+  onRestore,
 }: {
   songs: { id: string; title: string; coverUrl: string }[];
   loading: boolean;
   error?: string;
   nothingPicked: boolean;
+  removedCount: number;
+  onRemove: (id: string) => void;
+  onRestore: () => void;
 }) {
   let body: ReactNode;
   if (nothingPicked) {
@@ -150,9 +156,18 @@ function SongsToSavePreview({
               alt=""
               className="h-8 w-12 shrink-0 rounded object-cover"
             />
-            <span className="min-w-0 truncate" title={song.title}>
+            <span className="min-w-0 grow truncate" title={song.title}>
               {song.title}
             </span>
+            <button
+              type="button"
+              onClick={() => onRemove(song.id)}
+              aria-label={`Remove “${song.title}” from the playlist`}
+              title="Remove from the playlist"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </li>
         ))}
       </ol>
@@ -161,11 +176,22 @@ function SongsToSavePreview({
 
   return (
     <div className="flex flex-col gap-1 text-sm">
-      <p className="text-muted-foreground">
-        {!nothingPicked && !loading && !error
-          ? `${songs.length} ${songs.length === 1 ? "song" : "songs"} will be saved`
-          : "Songs that will be saved"}
-      </p>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-muted-foreground">
+          {!nothingPicked && !loading && !error
+            ? `${songs.length} ${songs.length === 1 ? "song" : "songs"} will be saved`
+            : "Songs that will be saved"}
+        </p>
+        {removedCount > 0 && (
+          <button
+            type="button"
+            onClick={onRestore}
+            className="text-xs underline underline-offset-2 hover:text-foreground"
+          >
+            {`Put back ${removedCount} removed ${removedCount === 1 ? "song" : "songs"}`}
+          </button>
+        )}
+      </div>
       <div className="max-h-56 overflow-y-auto rounded-md border">{body}</div>
     </div>
   );
@@ -186,6 +212,8 @@ export function SavePlaylistDialog({
   const [name, setName] = useState(defaultName);
   const [includePlayed, setIncludePlayed] = useState(true);
   const [includeQueued, setIncludeQueued] = useState(true);
+  // YouTube ids of songs removed from the list to save.
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
   // Hash of the playlist to overwrite, or "" to save a new one.
   const [overwriteHash, setOverwriteHash] = useState("");
 
@@ -212,7 +240,11 @@ export function SavePlaylistDialog({
     },
   );
   const songsToSave = partySongs.data
-    ? pickSongsToSave(partySongs.data, { includePlayed, includeQueued })
+    ? pickSongsToSave(partySongs.data, {
+        includePlayed,
+        includeQueued,
+        excludeIds: removedIds,
+      })
     : [];
 
   const save = api.playlist.saveFromParty.useMutation({
@@ -236,6 +268,7 @@ export function SavePlaylistDialog({
       setName(defaultName);
       setIncludePlayed(true);
       setIncludeQueued(true);
+      setRemovedIds([]);
       setOverwriteHash("");
       save.reset();
     }
@@ -262,6 +295,7 @@ export function SavePlaylistDialog({
                   : name,
                 includePlayed,
                 includeQueued,
+                excludeIds: removedIds,
                 ...(overwriting ? { overwriteHash, hostKey } : {}),
               });
             }}
@@ -299,6 +333,15 @@ export function SavePlaylistDialog({
               loading={partySongs.isLoading}
               error={partySongs.error?.message}
               nothingPicked={!includePlayed && !includeQueued}
+              removedCount={removedIds.length}
+              onRemove={(id) => {
+                setRemovedIds((ids) => [...ids, id]);
+                save.reset();
+              }}
+              onRestore={() => {
+                setRemovedIds([]);
+                save.reset();
+              }}
             />
             {ownPlaylists.length > 0 && (
               <fieldset className="flex flex-col gap-2 text-sm">

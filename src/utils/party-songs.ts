@@ -39,16 +39,22 @@ export function splitPartySongs(party: KaraokeParty) {
 
 /**
  * The songs a playlist saved with these choices holds. Each song once: first
- * the songs sung, then the queue, capped at MAX_PLAYLIST_SONGS.
+ * the songs sung, then the queue, leaving out the ids in `excludeIds`, capped
+ * at MAX_PLAYLIST_SONGS.
  */
 export function pickSongsToSave(
   songs: { played: PlaylistSongInput[]; queued: PlaylistSongInput[] },
   {
     includePlayed,
     includeQueued,
-  }: { includePlayed: boolean; includeQueued: boolean },
+    excludeIds = [],
+  }: {
+    includePlayed: boolean;
+    includeQueued: boolean;
+    excludeIds?: readonly string[];
+  },
 ) {
-  const seen = new Set<string>();
+  const seen = new Set<string>(excludeIds);
   const picked: PlaylistSongInput[] = [];
   for (const song of [
     ...(includePlayed ? songs.played : []),

@@ -565,6 +565,8 @@ export const playlistRouter = createTRPCRouter({
           includePlayed: z.boolean().default(true),
           /** Songs still waiting, in queue order (the one on screen first). */
           includeQueued: z.boolean().default(true),
+          /** YouTube ids of songs the person removed from the list to save. */
+          excludeIds: z.array(z.string().max(20)).max(1000).default([]),
         })
         .refine((input) => input.includePlayed || input.includeQueued, {
           message: "Pick songs already sung, songs in the queue, or both.",
@@ -599,11 +601,13 @@ export const playlistRouter = createTRPCRouter({
       if (songs.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: !input.includeQueued
-            ? "No songs have been played at this party yet."
-            : !input.includePlayed
-              ? "There are no songs in the queue."
-              : "This party has no songs to save yet.",
+          message: input.excludeIds.length
+            ? "Every song was removed from the list."
+            : !input.includeQueued
+              ? "No songs have been played at this party yet."
+              : !input.includePlayed
+                ? "There are no songs in the queue."
+                : "This party has no songs to save yet.",
         });
       }
 

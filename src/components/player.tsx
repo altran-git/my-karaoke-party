@@ -316,39 +316,36 @@ export function Player({
         )}
       </div>
 
-      {/* Sits in the middle of YouTube's control bar, below the seek bar.
-          Clicks pass through, so the controls under it still work. */}
-      <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 max-w-[60%] -translate-x-1/2 truncate rounded-full text-outline bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
-        {/* Only the text is faded, so the background stays as set above. */}
-        <span className="opacity-60">
-          {nextVideo ? (
-            <>
-              <span className="font-semibold uppercase tracking-wide text-primary">
-                Up next:
-              </span>{" "}
-              {decode(nextVideo.title)}
-              <span className="text-slate-300"> · requested by </span>
-              <span className="font-semibold">{nextVideo.singerName}</span>
-            </>
-          ) : (
-            <span className="text-slate-300">No songs in queue</span>
-          )}
-        </span>
+      {/* "Up next" sits in the middle of YouTube's control bar, below the seek
+          bar, with a small QR code to its right (bottom edges lined up, so
+          the code rises over the seek bar). Clicks pass through, so the
+          controls under them still work. */}
+      <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 flex max-w-[60%] -translate-x-1/2 items-end gap-3">
+        <div className="min-w-0 truncate rounded-full text-outline bg-black/[0.01] px-4 py-1 text-center text-sm text-white lg:text-base">
+          {/* Only the text is faded, so the background stays as set above. */}
+          <span className="opacity-60">
+            {nextVideo ? (
+              <>
+                <span className="font-semibold uppercase tracking-wide text-primary">
+                  Up next:
+                </span>{" "}
+                {decode(nextVideo.title)}
+                <span className="text-slate-300"> · requested by </span>
+                <span className="font-semibold">{nextVideo.singerName}</span>
+              </>
+            ) : (
+              <span className="text-slate-300">No songs in queue</span>
+            )}
+          </span>
+        </div>
+        <QrCode url={joinPartyUrl} size={43} className="shrink-0 p-1" />
       </div>
 
-      {/* QR code with Skip under it, both right-aligned, just above YouTube's
-          seek bar. right-16 keeps them clear of the edge on TVs that crop the
-          picture (overscan), so the code can still be scanned. size is
-          smaller than the 128px default so it covers less of the lyrics. */}
+      {/* Skip, just above YouTube's seek bar. right-16 keeps it clear of the
+          edge on TVs that crop the picture (overscan). */}
       <div className="pointer-events-none absolute bottom-20 right-16 z-10 flex flex-col items-end">
-        <QrCode
-          url={joinPartyUrl}
-          size={100}
-          className="pointer-events-auto"
-        />
-
         <div
-          className={`pointer-events-auto pt-1 ${
+          className={`pointer-events-auto ${
             // Hide Skip while playing fullscreen, and always on the last song
             // in the queue (there's nothing to skip to).
             !nextVideo || (isPlaying && isFullscreen) ? "hidden" : "block"

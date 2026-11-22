@@ -69,28 +69,51 @@ export function useSongSuggestions(
   // Songs on screen, so the next mix can leave them out.
   const shownRef = useRef<string[]>([]);
 
-  const pool = useMemo(() => {
-    const ranked = data ?? [];
-    if (!shuffle) return ranked;
+  const mix = useMemo(() => {
+    const all = data ?? [];
+    const ranked = all.filter((s) => s.reason !== "random");
+    const extras = all.filter((s) => s.reason === "random");
+
+    // The best matches in order (the TV grid), random songs only as filler.
+    if (!shuffle) return { ranked, extras, slot: -1 };
 
     // Weighted random order (Efraimidis-Spirakis): every song can come up,
     // but the better matches near the top of the ranking come up more.
     // Songs shown last time go to the back.
     const shownBefore = new Set(shownRef.current);
-    return ranked
-      .map((song, rank) => ({
-        song,
-        key:
-          Math.random() ** (rank + 10) - (shownBefore.has(song.id) ? 1 : 0),
-      }))
-      .sort((a, b) => b.key - a.key)
-      .map(({ song }) => song);
+    const shuffled = (songs: SuggestedSong[], weighted: boolean) =>
+      songs
+        .map((song, rank) => ({
+          song,
+          key:
+            Math.random() ** (weighted ? rank + 10 : 1) -
+            (shownBefore.has(song.id) ? 1 : 0),
+        }))
+        .sort((a, b) => b.key - a.key)
+        .map(({ song }) => song);
+
+    return {
+      ranked: shuffled(ranked, true),
+      extras: shuffled(extras, false),
+      // One spot in the list goes to a song from anywhere.
+      slot: Math.floor(Math.random() * count),
+    };
     // shownRef is read only when a new mix is asked for, on purpose.
-  }, [data, shuffle]);
+  }, [data, shuffle, count]);
 
   const inParty = new Set(playlist.map((v) => v.id));
   for (const id of keepIds) inParty.delete(id);
-  const songs = pool.filter((s) => !inParty.has(s.id)).slice(0, count);
+  const ranked = mix.ranked.filter((s) => !inParty.has(s.id));
+  const extras = mix.extras.filter((s) => !inParty.has(s.id));
+
+  let songs: SuggestedSong[];
+  if (mix.slot >= 0 && extras.length > 0) {
+    songs = ranked.slice(0, count - 1);
+    songs.splice(Math.min(mix.slot, songs.length), 0, extras[0]!);
+    songs.push(...extras.slice(1, 1 + count - songs.length));
+  } else {
+    songs = [...ranked, ...extras].slice(0, count);
+  }
 
   const shownKey = songs.map((s) => s.id).join(",");
   useEffect(() => {

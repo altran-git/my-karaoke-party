@@ -13,8 +13,10 @@ export type SuggestedSong = {
    * "related": it shares a saved playlist with a song sung recently.
    * "popular": it's in many saved playlists (used when there's too little
    * to go on, for example at the start of a party).
+   * "random": any song from any saved playlist, so every saved song can
+   * come up, even one that's in a single playlist and unrelated to tonight.
    */
-  reason: "related" | "popular";
+  reason: "related" | "popular" | "random";
   /** For "related": the recently sung song that led to it most. */
   becauseOf?: string;
 };
@@ -32,6 +34,12 @@ const MAX_RELATED_PLAYLISTS = 50;
 /** Most-shared songs looked at to fill up the list. */
 const MAX_POPULAR = 150;
 
+/**
+ * Random songs from all saved playlists, added after the ranked ones. A
+ * fresh random batch comes with every request.
+ */
+const RANDOM_SONGS = 30;
+
 type SongRow = {
   videoId: string;
   title: string;
@@ -46,7 +54,8 @@ type SongRow = {
  * other songs. The newest song's playlists count most (1, then 1/2, 1/3...
  * for older songs), and songs right next to it in a playlist get a bonus,
  * since playlists are often in a deliberate order. Songs in many playlists
- * fill up the list after that.
+ * fill up the list after that, and a fresh batch of random songs from all
+ * saved playlists comes last.
  *
  * `recentIds` are the songs sung at this party, newest first.
  */
@@ -171,6 +180,33 @@ export async function suggestSongs(
         if (result.length >= CANDIDATES) break;
       }
     }
+  }
+
+  // A few songs from anywhere, so no saved song is left out for good.
+  const taken = new Set([...result.map((s) => s.id), ...seeds]);
+  const randomSongs = await db.$queryRaw<SongRow[]>`
+    SELECT "videoId", title, "coverUrl", duration
+    FROM (
+      SELECT DISTINCT ON ("videoId") "videoId", title, "coverUrl", duration
+      FROM "PlaylistSong"
+    ) AS songs
+    ORDER BY random()
+    LIMIT ${RANDOM_SONGS + taken.size}
+  `;
+
+  let added = 0;
+  for (const song of randomSongs) {
+    if (added >= RANDOM_SONGS) break;
+    if (taken.has(song.videoId)) continue;
+    taken.add(song.videoId);
+    result.push({
+      id: song.videoId,
+      title: song.title,
+      coverUrl: song.coverUrl,
+      duration: song.duration,
+      reason: "random",
+    });
+    added++;
   }
 
   return result;
